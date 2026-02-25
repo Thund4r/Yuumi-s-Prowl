@@ -109,8 +109,9 @@ namespace YuumisProwl.Projectile
         /// </summary>
         private void MoveTowardsTarget()
         {
-            Vector3 direction = (targetPosition - transform.position).normalized;
-            transform.position += direction * homingSpeed * Time.deltaTime;
+            float angle = transform.eulerAngles.z * Mathf.Deg2Rad;
+            Vector3 forward = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+            transform.position += forward * homingSpeed * Time.deltaTime;
         }
 
         /// <summary>
@@ -119,14 +120,14 @@ namespace YuumisProwl.Projectile
         private void RotateTowardsTarget()
         {
             Vector3 direction = targetPosition - transform.position;
+            direction.z = 0f;
             if (direction.sqrMagnitude < 0.001f) return;
 
-            Quaternion targetRotation = Quaternion.LookRotation(direction);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation,
-                targetRotation,
-                rotationSpeed * Time.deltaTime
-            );
+            float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+            float currentAngle = transform.eulerAngles.z;
+
+            float newAngle = Mathf.MoveTowardsAngle(currentAngle, targetAngle, rotationSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.Euler(0f, 0f, newAngle);
         }
 
         /// <summary>
