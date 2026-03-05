@@ -99,26 +99,47 @@ namespace YuumisProwl.BallChain
         /// </summary>
         private void MoveChain(float deltaTime)
         {
-            if (pathController == null) return;
+            if (pathController == null || ballChain.Count == 0) return;
 
             float pathLength = pathController.GetPathLength();
             if (pathLength <= 0) return;
 
             float moveDistance = ballSpeed * deltaTime;
             float progressIncrease = moveDistance / pathLength;
+            float spacingProgress = ballSpacing / pathLength;
 
-            for (int i = 0; i < ballChain.Count; i++)
+            // Move the tail ball (last index, furthest back on path)
+            int tailIndex = ballChain.Count - 1;
+            ballChain[tailIndex].pathProgress += progressIncrease;
+
+            // Every ball ahead follows spacing from the one behind it
+            for (int i = tailIndex - 1; i >= 0; i--)
             {
-                ballChain[i].pathProgress += progressIncrease;
+                float targetProgress = ballChain[i + 1].pathProgress + spacingProgress;
 
-                // Check if ball reached the end
-                if (ballChain[i].pathProgress >= 1f)
+                // If there's a gap (ball is too far ahead), pull it back
+                if (ballChain[i].pathProgress > targetProgress)
                 {
-                    ballChain[i].pathProgress = 1f;
-                    isMoving = false;
-                    OnBallReachedEnd?.Invoke();
-                    Debug.LogWarning("Ball reached the end! Game Over!");
+                    ballChain[i].pathProgress = Mathf.MoveTowards(
+                        ballChain[i].pathProgress,
+                        targetProgress,
+                        gapCloseSpeed * deltaTime / pathLength
+                    );
                 }
+                else
+                {
+                    // Ball is where it should be or too close — snap to correct spacing
+                    ballChain[i].pathProgress = targetProgress;
+                }
+            }
+
+            // Check if lead ball reached the end
+            if (ballChain[0].pathProgress >= 1f)
+            {
+                ballChain[0].pathProgress = 1f;
+                isMoving = false;
+                OnBallReachedEnd?.Invoke();
+                Debug.LogWarning("Ball reached the end! Game Over!");
             }
         }
 
@@ -189,7 +210,7 @@ namespace YuumisProwl.BallChain
         public void InsertBall(Ball newBall, float insertProgress)
         {
             // Find insertion index
-            int insertIndex = FindInsertionIndex(insertProgress);
+            int insertIndex = FindNearestBallIndex(insertProgress);
 
             // Create new node
             BallNode newNode = new BallNode(newBall, insertProgress, insertIndex);
@@ -214,30 +235,101 @@ namespace YuumisProwl.BallChain
             ball.Initialize(color);
             ball.OnGetFromPool();
 
-            // Find insertion index before inserting
-            int insertIndex = FindInsertionIndex(insertProgress);
+            float pathLength = pathController.GetPathLength();
+            float spacingProgress = ballSpacing / pathLength;
 
-            InsertBall(ball, insertProgress);
+            // Find the hit ball index
+            int hitIndex = FindNearestBallIndex(insertProgress);
 
-            Debug.Log($"Inserted ball at progress {insertProgress:F2} - Color: {color}");
+            int insertIndex;
+            float insertAt;
 
-            // Check for matches after insertion
+            if (hitIndex < 0)
+            {
+                // No balls in chain, just insert at progress
+                insertIndex = 0;
+                insertAt = insertProgress;
+            }
+            else
+            {
+                float hitProgress = ballChain[hitIndex].pathProgress;
+
+                // Determine which side the projectile hit from
+                // If projectile progress > hit ball progress, insert ahead (before in list, higher progress)
+                // If projectile progress < hit ball progress, insert behind (after in list, lower progress)
+                if (insertProgress >= hitProgress)
+                {
+                    // Insert ahead of the hit ball
+                    insertIndex = hitIndex;
+                    insertAt = hitProgress + spacingProgress;
+                }
+                else
+                {
+                    // Insert behind the hit ball
+                    insertIndex = hitIndex + 1;
+                    insertAt = hitProgress - spacingProgress;
+                }
+            }
+
+            BallNode newNode = new BallNode(ball, insertAt, insertIndex);
+            ballChain.Insert(insertIndex, newNode);
+
+            // Push balls ahead (lower index = further along path) forward
+            PushBallsForward(insertIndex - 1, spacingProgress);
+
+            // Push balls behind (higher index = earlier on path) backward
+            PushBallsBackward(insertIndex + 1);
+
+            UpdateChainIndices();
+
+            Debug.Log($"Inserted ball at index {insertIndex} - Color: {color}");
+
             StartCoroutine(CheckMatchesAfterInsertion(insertIndex));
         }
 
         /// <summary>
-        /// Finds the correct index to insert a ball based on path progress.
+        /// Finds the index of the ball nearest to the given progress.
         /// </summary>
-        private int FindInsertionIndex(float progress)
+        private int FindNearestBallIndex(float progress)
         {
-            for (int i = 0; i < ballChain.Count; i++)
+            if (ballChain.Count == 0) return -1;
+
+            int nearestIndex = 0;
+            float nearestDistance = Mathf.Abs(ballChain[0].pathProgress - progress);
+
+            for (int i = 1; i < ballChain.Count; i++)
             {
-                if (ballChain[i].pathProgress > progress)
+                float distance = Mathf.Abs(ballChain[i].pathProgress - progress);
+                if (distance < nearestDistance)
                 {
-                    return i;
+                    nearestDistance = distance;
+                    nearestIndex = i;
                 }
             }
-            return ballChain.Count;
+
+            return nearestIndex;
+        }
+
+        /// <summary>
+        /// Pushes balls forward (toward end of path) from the given index.
+        /// </summary>
+        private void PushBallsForward(int startIndex, float spacingProgress)
+        {
+            if (startIndex < 0) return;
+
+            for (int i = startIndex; i >= 0; i--)
+            {
+                float requiredProgress = ballChain[i + 1].pathProgress + spacingProgress;
+
+                if (ballChain[i].pathProgress < requiredProgress)
+                {
+                    ballChain[i].pathProgress = requiredProgress;
+                }
+                else
+                {
+                    break; // Rest of chain already has proper spacing
+                }
+            }
         }
 
         /// <summary>
@@ -352,69 +444,14 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Closes the gap after ball removal by pulling balls together.
+        /// Closes the gap after ball removal.
+        /// MoveChain handles the actual closing, this just pauses briefly.
         /// </summary>
         private IEnumerator CloseGap(int gapIndex)
         {
-            if (gapIndex < 0 || gapIndex >= ballChain.Count) yield break;
-
-            float pathLength = pathController.GetPathLength();
-            float spacingProgress = ballSpacing / pathLength;
-
-            // Calculate target positions for all balls after the gap
-            List<float> targetProgresses = new List<float>();
-            for (int i = gapIndex; i < ballChain.Count; i++)
-            {
-                if (i == gapIndex && gapIndex > 0)
-                {
-                    // First ball after gap should be spaced from previous ball
-                    targetProgresses.Add(ballChain[gapIndex - 1].pathProgress - spacingProgress);
-                }
-                else if (i == gapIndex && gapIndex == 0)
-                {
-                    // If gap is at start, just use current progress
-                    targetProgresses.Add(ballChain[i].pathProgress);
-                }
-                else
-                {
-                    // Subsequent balls maintain spacing
-                    targetProgresses.Add(targetProgresses[i - gapIndex] - spacingProgress);
-                }
-            }
-
-            // Animate gap closing
-            float elapsed = 0f;
-            float duration = 0.3f; // Gap closing animation duration
-
-            List<float> startProgresses = new List<float>();
-            for (int i = gapIndex; i < ballChain.Count; i++)
-            {
-                startProgresses.Add(ballChain[i].pathProgress);
-            }
-
-            while (elapsed < duration)
-            {
-                elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-
-                for (int i = gapIndex; i < ballChain.Count; i++)
-                {
-                    int localIndex = i - gapIndex;
-                    ballChain[i].pathProgress = Mathf.Lerp(
-                        startProgresses[localIndex],
-                        targetProgresses[localIndex],
-                        t
-                    );
-                }
-
-                yield return null;
-            }
-
-            // Ensure final positions are exact
-            for (int i = gapIndex; i < ballChain.Count; i++)
-            {
-                ballChain[i].pathProgress = targetProgresses[i - gapIndex];
-            }
+            // Brief pause before gap starts closing
+            yield return new WaitForSeconds(0.1f);
+            // MoveChain will handle the rest automatically
         }
 
         /// <summary>
