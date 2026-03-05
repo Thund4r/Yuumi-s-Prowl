@@ -233,7 +233,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   homingSpeed: 8
-  rotationSpeed: 200
+  rotationSpeed: 500
   meshRenderer: {fileID: 1962039057463099734}
   sphereCollider: {fileID: 8131570232018880450}
   trailRenderer: {fileID: 5103824426877094331}

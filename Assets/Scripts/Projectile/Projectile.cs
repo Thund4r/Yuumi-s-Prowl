@@ -28,7 +28,7 @@ namespace YuumisProwl.Projectile
         private Camera mainCamera;
         private BallChainManager ballChainManager;
         private Material projectileMaterial;
-
+        private bool isLaunched;
         public BallColor ProjectileColor => projectileColor;
 
         private void Awake()
@@ -50,9 +50,15 @@ namespace YuumisProwl.Projectile
             }
         }
 
+        public void Launch()
+        {
+            isLaunched = true;
+        }
+
         private void Update()
         {
             if (!isActive) return;
+            if (!isLaunched) return;
 
             UpdateTarget();
             MoveTowardsTarget();
@@ -217,6 +223,7 @@ namespace YuumisProwl.Projectile
         public void OnReturnToPool()
         {
             isActive = false;
+            isLaunched = false;
             targetPosition = Vector3.zero;
             transform.position = Vector3.zero;
             transform.rotation = Quaternion.identity;

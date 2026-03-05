@@ -28,6 +28,7 @@ namespace YuumisProwl.Projectile
         private ObjectPool<Projectile> projectilePool;
         private float lastSpawnTime;
         private BallColor nextColor;
+        private Projectile currentProjectile;
 
         private void Awake()
         {
@@ -61,6 +62,7 @@ namespace YuumisProwl.Projectile
 
             // Initialize next color
             nextColor = GetNextColor();
+            SpawnNextProjectile();
         }
 
         private void Update()
@@ -91,10 +93,8 @@ namespace YuumisProwl.Projectile
             bool shouldShoot = false;
 
             #if UNITY_EDITOR || UNITY_STANDALONE
-            // Mouse input for editor and standalone
             shouldShoot = Input.GetMouseButtonDown(0);
             #else
-            // Touch input for mobile
             if (Input.touchCount > 0)
             {
                 Touch touch = Input.GetTouch(0);
@@ -102,7 +102,6 @@ namespace YuumisProwl.Projectile
             }
             #endif
 
-            // Alternative keyboard input for testing
             if (Input.GetKeyDown(shootKey) && shootKey != KeyCode.Mouse0)
             {
                 shouldShoot = true;
@@ -110,22 +109,40 @@ namespace YuumisProwl.Projectile
 
             if (shouldShoot)
             {
-                TrySpawnProjectile();
+                TryLaunchProjectile();
             }
         }
 
         /// <summary>
-        /// Attempts to spawn a projectile if cooldown has elapsed.
+        /// Attempts to launch the projectile if cooldown has elapsed.
         /// </summary>
-        private void TrySpawnProjectile()
+        private void TryLaunchProjectile()
         {
-            if (Time.time - lastSpawnTime < spawnCooldown)
-            {
-                return; // Still on cooldown
-            }
+            if (currentProjectile == null) return;
+            if (Time.time - lastSpawnTime < spawnCooldown) return;
 
-            SpawnProjectile();
+            currentProjectile.Launch();
+            currentProjectile = null;
             lastSpawnTime = Time.time;
+
+            // Spawn the next one ready at the spawn point
+            SpawnNextProjectile();
+        }
+
+        private void SpawnNextProjectile()
+        {
+            Projectile projectile = projectilePool.Get();
+            if (projectile == null) return;
+
+            projectile.transform.position = spawnPoint.position;
+            projectile.transform.rotation = spawnPoint.rotation;
+
+            BallColor color = randomColors ? nextColor : fixedColor;
+            projectile.Initialize(color, ballChainManager);
+            projectile.OnGetFromPool();
+
+            currentProjectile = projectile;
+            nextColor = GetNextColor();
         }
 
         /// <summary>
