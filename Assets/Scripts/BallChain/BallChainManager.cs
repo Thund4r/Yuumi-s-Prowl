@@ -23,6 +23,8 @@ namespace YuumisProwl.BallChain
         [SerializeField] private float gapCloseSpeed = 5f;
         [SerializeField] private float destructionDelay = 0.1f;
         [SerializeField] private bool enableDestructionEffects = true;
+        [SerializeField] private float recoilDistance = 0.5f;
+        [SerializeField] private float recoilDuration = 0.15f;
 
         [Header("Pool Settings")]
         [SerializeField] private int initialPoolSize = 50;
@@ -423,8 +425,16 @@ namespace YuumisProwl.BallChain
                     yield break;
                 }
 
-                // Close the gap
+                // Close the gap (wait until spacing has settled)
                 yield return StartCoroutine(CloseGap(gapIndex));
+
+                // Only apply recoil when the gap is not at the very front of the line.
+                // If gapIndex == 0, there are no balls ahead that were pushed back,
+                // so no recoil should occur.
+                if (gapIndex > 0)
+                {
+                    yield return StartCoroutine(ApplyChainRecoil());
+                }
 
                 // Check for cascade matches
                 if (gapIndex >= 0 && gapIndex < ballChain.Count)
@@ -451,7 +461,84 @@ namespace YuumisProwl.BallChain
         {
             // Brief pause before gap starts closing
             yield return new WaitForSeconds(0.1f);
-            // MoveChain will handle the rest automatically
+
+            // If gapIndex is invalid or chain too small, nothing to wait for
+            if (gapIndex <= 0 || gapIndex >= ballChain.Count) yield break;
+
+            float pathLength = pathController.GetPathLength();
+            if (pathLength <= 0f) yield break;
+
+            float spacingProgress = ballSpacing / pathLength;
+
+            float timeout = 1.0f; // safety timeout in seconds
+            float elapsed = 0f;
+
+            // Wait until the spacing between the ball ahead of the gap and the ball at the gap
+            // reaches the expected spacing (within a small epsilon), or until timeout.
+            while (elapsed < timeout)
+            {
+                if (gapIndex <= 0 || gapIndex >= ballChain.Count) break;
+
+                float desired = ballChain[gapIndex].pathProgress + spacingProgress;
+                float current = ballChain[gapIndex - 1].pathProgress;
+
+                if (Mathf.Abs(current - desired) <= 0.0005f)
+                {
+                    // Spacing settled
+                    break;
+                }
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        /// <summary>
+        /// Applies a recoil to the entire chain by moving every ball backward
+        /// along the path by a fixed world distance (smoothed over time).
+        /// </summary>
+        private IEnumerator ApplyChainRecoil()
+        {
+            if (ballChain.Count == 0) yield break;
+            if (recoilDistance <= 0f) yield break;
+
+            float pathLength = pathController.GetPathLength();
+            if (pathLength <= 0f) yield break;
+
+            float recoilProgress = recoilDistance / pathLength;
+
+            // Ensure we don't move the lead ball before start of path
+            float maxAllowedRecoil = ballChain[0].pathProgress; // lead ball progress
+            recoilProgress = Mathf.Min(recoilProgress, maxAllowedRecoil);
+            if (recoilProgress <= 0f) yield break;
+
+            // Record original progresses
+            float[] original = new float[ballChain.Count];
+            for (int i = 0; i < ballChain.Count; i++) original[i] = ballChain[i].pathProgress;
+
+            float elapsed = 0f;
+            while (elapsed < recoilDuration)
+            {
+                float t = elapsed / recoilDuration;
+                float lerp = Mathf.SmoothStep(0f, 1f, t);
+
+                for (int i = 0; i < ballChain.Count; i++)
+                {
+                    ballChain[i].pathProgress = original[i] - recoilProgress * lerp;
+                }
+
+                UpdateBallPositions();
+
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+
+            // Finalize
+            for (int i = 0; i < ballChain.Count; i++)
+            {
+                ballChain[i].pathProgress = original[i] - recoilProgress;
+            }
+            UpdateBallPositions();
         }
 
         /// <summary>

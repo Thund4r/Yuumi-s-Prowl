@@ -50,8 +50,21 @@ namespace YuumisProwl.Projectile
             }
         }
 
-        public void Launch()
+        public void Launch(Vector3 targetWorldPosition)
         {
+            // Set immediate target to the clicked world position
+            targetPosition = targetWorldPosition;
+
+            // Face the target immediately so the initial movement
+            // goes toward the clicked position, then resume homing.
+            Vector3 dir = targetWorldPosition - transform.position;
+            dir.z = 0f;
+            if (dir.sqrMagnitude > 0.0001f)
+            {
+                float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
+                transform.rotation = Quaternion.Euler(0f, 0f, angle);
+            }
+
             isLaunched = true;
         }
 
@@ -91,13 +104,12 @@ namespace YuumisProwl.Projectile
             if (mainCamera == null) return;
 
             #if UNITY_EDITOR || UNITY_STANDALONE
-            // Mouse input for editor and standalone builds
-            if (Input.GetMouseButton(0))
-            {
-                Vector3 mousePos = Input.mousePosition;
-                mousePos.z = Mathf.Abs(mainCamera.transform.position.z);
-                targetPosition = mainCamera.ScreenToWorldPoint(mousePos);
-            }
+            // Always track mouse position in editor/standalone so the
+            // projectile continuously homes to the cursor and can circle it.
+            Vector3 mousePos = Input.mousePosition;
+            mousePos.z = Mathf.Abs(mainCamera.transform.position.z - transform.position.z);
+            targetPosition = mainCamera.ScreenToWorldPoint(mousePos);
+            
             #else
             // Touch input for mobile
             if (Input.touchCount > 0)

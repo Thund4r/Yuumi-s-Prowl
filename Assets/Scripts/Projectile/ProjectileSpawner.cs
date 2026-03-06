@@ -91,37 +91,57 @@ namespace YuumisProwl.Projectile
         private void HandleInput()
         {
             bool shouldShoot = false;
+            Vector3 worldTarget = Vector3.zero;
+            Camera cam = Camera.main;
 
             #if UNITY_EDITOR || UNITY_STANDALONE
             shouldShoot = Input.GetMouseButtonDown(0);
+            if (shouldShoot && cam != null)
+            {
+                Vector3 mousePos = Input.mousePosition;
+                mousePos.z = Mathf.Abs(cam.transform.position.z - spawnPoint.position.z);
+                worldTarget = cam.ScreenToWorldPoint(mousePos);
+            }
             #else
             if (Input.touchCount > 0)
             {
                 Touch touch = Input.GetTouch(0);
                 shouldShoot = touch.phase == TouchPhase.Began;
+                if (shouldShoot && cam != null)
+                {
+                    Vector3 touchPos = touch.position;
+                    touchPos.z = Mathf.Abs(cam.transform.position.z - spawnPoint.position.z);
+                    worldTarget = cam.ScreenToWorldPoint(touchPos);
+                }
             }
             #endif
 
             if (Input.GetKeyDown(shootKey) && shootKey != KeyCode.Mouse0)
             {
                 shouldShoot = true;
+                if (cam != null)
+                {
+                    Vector3 mousePos = Input.mousePosition;
+                    mousePos.z = Mathf.Abs(cam.transform.position.z - spawnPoint.position.z);
+                    worldTarget = cam.ScreenToWorldPoint(mousePos);
+                }
             }
 
             if (shouldShoot)
             {
-                TryLaunchProjectile();
+                TryLaunchProjectile(worldTarget);
             }
         }
 
         /// <summary>
         /// Attempts to launch the projectile if cooldown has elapsed.
         /// </summary>
-        private void TryLaunchProjectile()
+        private void TryLaunchProjectile(Vector3 targetWorldPos)
         {
             if (currentProjectile == null) return;
             if (Time.time - lastSpawnTime < spawnCooldown) return;
 
-            currentProjectile.Launch();
+            currentProjectile.Launch(targetWorldPos);
             currentProjectile = null;
             lastSpawnTime = Time.time;
 
