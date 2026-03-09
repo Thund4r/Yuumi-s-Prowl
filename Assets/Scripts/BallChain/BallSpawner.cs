@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 
 namespace YuumisProwl.BallChain
 {
@@ -23,6 +24,8 @@ namespace YuumisProwl.BallChain
 
         private float spawnTimer;
         private int ballsSpawned;
+        // Keep the last two spawned colors to avoid creating 3-in-a-row
+        private List<BallColor> recentColors = new List<BallColor>(2);
 
         private void Start()
         {
@@ -79,13 +82,52 @@ namespace YuumisProwl.BallChain
             ballChainManager.SpawnBall(randomColor);
             ballsSpawned++;
 
+            // Track recent colors (max 2)
+            recentColors.Add(randomColor);
+            if (recentColors.Count > 2)
+            {
+                recentColors.RemoveAt(0);
+            }
+
             Debug.Log($"Spawned ball #{ballsSpawned} - Color: {randomColor}");
         }
 
         private BallColor GetRandomColor()
         {
-            int colorIndex = Random.Range(0, colorCount);
-            return (BallColor)colorIndex;
+            if (colorCount <= 1)
+            {
+                return (BallColor)0;
+            }
+
+            int attempts = 0;
+            while (attempts < 10)
+            {
+                int colorIndex = Random.Range(0, colorCount);
+                BallColor candidate = (BallColor)colorIndex;
+
+                // If last two exist and are the same as candidate, try again
+                if (recentColors.Count == 2)
+                {
+                    BallColor last = recentColors[recentColors.Count - 1];
+                    BallColor secondLast = recentColors[recentColors.Count - 2];
+                    if (last == secondLast && last == candidate)
+                    {
+                        attempts++;
+                        continue;
+                    }
+                }
+
+                return candidate;
+            }
+
+            // Fallback: pick any color different from the last one if possible
+            BallColor lastColor = recentColors.Count > 0 ? recentColors[recentColors.Count - 1] : (BallColor)(-1);
+            for (int i = 0; i < colorCount; i++)
+            {
+                BallColor c = (BallColor)i;
+                if (c != lastColor) return c;
+            }
+            return (BallColor)0;
         }
 
         /// <summary>
@@ -103,6 +145,7 @@ namespace YuumisProwl.BallChain
         {
             ballsSpawned = 0;
             spawnTimer = 0f;
+            recentColors.Clear();
         }
     }
 }

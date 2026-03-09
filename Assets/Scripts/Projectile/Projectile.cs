@@ -27,6 +27,7 @@ namespace YuumisProwl.Projectile
         private bool isActive;
         private Camera mainCamera;
         private BallChainManager ballChainManager;
+        private ProjectileSpawner ownerSpawner;
         private Material projectileMaterial;
         private bool isLaunched;
         public BallColor ProjectileColor => projectileColor;
@@ -81,11 +82,12 @@ namespace YuumisProwl.Projectile
         /// <summary>
         /// Initializes the projectile with a color and chain manager reference.
         /// </summary>
-        public void Initialize(BallColor color, BallChainManager chainManager)
+        public void Initialize(BallColor color, BallChainManager chainManager, ProjectileSpawner spawner = null)
         {
             projectileColor = color;
             ballChainManager = chainManager;
             isActive = true;
+            ownerSpawner = spawner;
 
             UpdateVisuals();
 
@@ -214,8 +216,15 @@ namespace YuumisProwl.Projectile
 
                     Debug.Log($"Projectile hit ball! Inserting {projectileColor} at progress {insertProgress:F2}");
 
-                    // Deactivate this projectile
-                    Deactivate();
+                    // Return this projectile to its spawner/pool
+                    if (ownerSpawner != null)
+                    {
+                        ownerSpawner.ReturnProjectile(this);
+                    }
+                    else
+                    {
+                        Deactivate();
+                    }
                 }
             }
         }

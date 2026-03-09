@@ -29,6 +29,7 @@ namespace YuumisProwl.Projectile
         private float lastSpawnTime;
         private BallColor nextColor;
         private Projectile currentProjectile;
+        private bool projectileInFlight = false;
 
         private void Awake()
         {
@@ -141,12 +142,16 @@ namespace YuumisProwl.Projectile
             if (currentProjectile == null) return;
             if (Time.time - lastSpawnTime < spawnCooldown) return;
 
+            // Prevent shooting while the chain is processing matches (including recoil)
+            if (ballChainManager != null && ballChainManager.IsProcessingMatches) return;
+
+            // Prevent firing if a projectile is already in flight
+            if (projectileInFlight) return;
+
             currentProjectile.Launch(targetWorldPos);
+            projectileInFlight = true;
             currentProjectile = null;
             lastSpawnTime = Time.time;
-
-            // Spawn the next one ready at the spawn point
-            SpawnNextProjectile();
         }
 
         private void SpawnNextProjectile()
@@ -158,7 +163,7 @@ namespace YuumisProwl.Projectile
             projectile.transform.rotation = spawnPoint.rotation;
 
             BallColor color = randomColors ? nextColor : fixedColor;
-            projectile.Initialize(color, ballChainManager);
+            projectile.Initialize(color, ballChainManager, this);
             projectile.OnGetFromPool();
 
             currentProjectile = projectile;
@@ -184,7 +189,7 @@ namespace YuumisProwl.Projectile
 
             // Initialize with color and chain manager reference
             BallColor color = randomColors ? nextColor : fixedColor;
-            projectile.Initialize(color, ballChainManager);
+            projectile.Initialize(color, ballChainManager, this);
             projectile.OnGetFromPool();
 
             // Get next color for the following projectile
@@ -216,6 +221,10 @@ namespace YuumisProwl.Projectile
             {
                 projectilePool.Return(projectile);
                 projectile.OnReturnToPool();
+
+                // Mark that the projectile is no longer in flight and prepare the next one
+                projectileInFlight = false;
+                SpawnNextProjectile();
             }
         }
 

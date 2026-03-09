@@ -443,7 +443,6 @@ namespace YuumisProwl.BallChain
                     if (matchedBalls.Count > 0)
                     {
                         Debug.Log($"Cascade match found! {matchedBalls.Count} more balls!");
-                        yield return new WaitForSeconds(destructionDelay);
                     }
                 }
                 else
@@ -459,8 +458,6 @@ namespace YuumisProwl.BallChain
         /// </summary>
         private IEnumerator CloseGap(int gapIndex)
         {
-            // Brief pause before gap starts closing
-            yield return new WaitForSeconds(0.1f);
 
             // If gapIndex is invalid or chain too small, nothing to wait for
             if (gapIndex <= 0 || gapIndex >= ballChain.Count) yield break;
@@ -512,9 +509,11 @@ namespace YuumisProwl.BallChain
             recoilProgress = Mathf.Min(recoilProgress, maxAllowedRecoil);
             if (recoilProgress <= 0f) yield break;
 
-            // Record original progresses
-            float[] original = new float[ballChain.Count];
-            for (int i = 0; i < ballChain.Count; i++) original[i] = ballChain[i].pathProgress;
+            // Snapshot the current chain to guard against the list changing during recoil
+            BallNode[] snapshot = ballChain.ToArray();
+            // Record original progresses from snapshot
+            float[] original = new float[snapshot.Length];
+            for (int i = 0; i < snapshot.Length; i++) original[i] = snapshot[i].pathProgress;
 
             float elapsed = 0f;
             while (elapsed < recoilDuration)
@@ -522,11 +521,13 @@ namespace YuumisProwl.BallChain
                 float t = elapsed / recoilDuration;
                 float lerp = Mathf.SmoothStep(0f, 1f, t);
 
-                for (int i = 0; i < ballChain.Count; i++)
+                for (int i = 0; i < snapshot.Length; i++)
                 {
-                    ballChain[i].pathProgress = original[i] - recoilProgress * lerp;
+                    // Update snapshot node progress (safe even if underlying list changes)
+                    snapshot[i].pathProgress = original[i] - recoilProgress * lerp;
                 }
 
+                // Update visuals based on current ballChain state
                 UpdateBallPositions();
 
                 elapsed += Time.deltaTime;
@@ -534,9 +535,9 @@ namespace YuumisProwl.BallChain
             }
 
             // Finalize
-            for (int i = 0; i < ballChain.Count; i++)
+            for (int i = 0; i < snapshot.Length; i++)
             {
-                ballChain[i].pathProgress = original[i] - recoilProgress;
+                snapshot[i].pathProgress = original[i] - recoilProgress;
             }
             UpdateBallPositions();
         }
