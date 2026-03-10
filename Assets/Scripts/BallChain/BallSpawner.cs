@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace YuumisProwl.BallChain
 {
     /// <summary>
-    /// Spawns balls at regular intervals for testing and gameplay.
+    /// Spawns balls and manages the intro animation.
     /// </summary>
     public class BallSpawner : MonoBehaviour
     {
@@ -13,19 +13,25 @@ namespace YuumisProwl.BallChain
         [SerializeField] private BallChainManager ballChainManager;
 
         [Header("Spawn Settings")]
-        [SerializeField] private float spawnInterval = 1f;
-        [SerializeField] private int maxBalls = 30;
-        [SerializeField] private bool spawnOnStart = true;
+        [SerializeField] private int ballCount = 30;
         [SerializeField] private int colorCount = 4;
 
-        [Header("Test Controls")]
-        [SerializeField] private bool autoSpawn = true;
-        [SerializeField] private KeyCode spawnKey = KeyCode.Space;
+        [Header("Intro Animation")]
+        [SerializeField] private float introDuration = 7f;
+        [SerializeField] private AnimationCurve introSpeedCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
 
-        private float spawnTimer;
-        private int ballsSpawned;
-        // Keep the last two spawned colors to avoid creating 3-in-a-row
         private List<BallColor> recentColors = new List<BallColor>(2);
+
+        /// <summary>
+        /// True while the intro animation is playing. 
+        /// Other systems (e.g. ProjectileSpawner) should check this to block input.
+        /// </summary>
+        public bool IsPlayingIntro { get; private set; }
+
+        /// <summary>
+        /// Fired when the intro finishes and gameplay can begin.
+        /// </summary>
+        public System.Action OnIntroComplete;
 
         private void Start()
         {
@@ -36,68 +42,103 @@ namespace YuumisProwl.BallChain
                 return;
             }
 
-            if (spawnOnStart)
+            StartCoroutine(SpawnAndAnimate());
+        }
+
+        private IEnumerator SpawnAndAnimate()
+        {
+            IsPlayingIntro = true;
+
+            // Pause normal chain movement during intro
+            ballChainManager.SetMoving(false);
+
+            // Spawn all balls at the start of the path, stacked at progress 0
+            SpawnAllBalls();
+
+            // Animate them spreading out along the path
+            yield return StartCoroutine(PlayIntroAnimation());
+
+            // Resume normal gameplay
+            ballChainManager.SetMoving(true);
+            IsPlayingIntro = false;
+            OnIntroComplete?.Invoke();
+
+            Debug.Log("Intro complete — gameplay started.");
+        }
+
+        /// <summary>
+        /// Spawns all balls at progress 0, tightly packed.
+        /// They'll be animated to their final positions by the intro.
+        /// </summary>
+        private void SpawnAllBalls()
+        {
+            for (int i = 0; i < ballCount; i++)
             {
-                StartCoroutine(SpawnInitialBalls());
+                BallColor color = GetRandomColor();
+                ballChainManager.SpawnBall(color);
+
+                recentColors.Add(color);
+                if (recentColors.Count > 2)
+                    recentColors.RemoveAt(0);
+            }
+
+            // Stack all balls at progress 0
+            var chain = ballChainManager.GetBallChain();
+            for (int i = 0; i < chain.Count; i++)
+            {
+                chain[i].pathProgress = 0f;
             }
         }
 
-        private void Update()
+        /// <summary>
+        /// Animates balls from stacked at the start to evenly spaced along the path.
+        /// Uses an animation curve: accelerates out, then decelerates to a stop.
+        /// </summary>
+        private IEnumerator PlayIntroAnimation()
         {
-            // Manual spawn with key press
-            if (Input.GetKeyDown(spawnKey))
-            {
-                SpawnBall();
-            }
+            var chain = ballChainManager.GetBallChain();
+            if (chain.Count == 0) yield break;
 
-            // Auto spawn
-            if (autoSpawn && ballsSpawned < maxBalls)
+            float pathLength = ballChainManager.GetPathLength();
+            if (pathLength <= 0f) yield break;
+
+            float spacingProgress = ballChainManager.BallSpacing / pathLength;
+
+            // The lead ball's final progress (all others are spaced behind it)
+            float leadTargetProgress = (chain.Count - 1) * spacingProgress;
+
+            float elapsed = 0f;
+
+            while (elapsed < introDuration)
             {
-                spawnTimer += Time.deltaTime;
-                if (spawnTimer >= spawnInterval)
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / introDuration);
+                float curveT = introSpeedCurve.Evaluate(t);
+
+                // Animate lead ball from 0 to its target
+                float leadProgress = Mathf.Lerp(0f, leadTargetProgress, curveT);
+
+                // Every ball is evenly spaced behind the lead
+                for (int i = 0; i < chain.Count; i++)
                 {
-                    SpawnBall();
-                    spawnTimer = 0f;
+                    chain[i].pathProgress = leadProgress - (i * spacingProgress);
                 }
+
+                ballChainManager.UpdateBallPositionsPublic();
+                yield return null;
             }
-        }
 
-        private IEnumerator SpawnInitialBalls()
-        {
-            // Spawn a few balls at the start with proper spacing
-            int initialCount = Mathf.Min(5, maxBalls);
-
-            for (int i = 0; i < initialCount; i++)
+            // Snap to final positions
+            for (int i = 0; i < chain.Count; i++)
             {
-                SpawnBall();
-                yield return new WaitForSeconds(0.2f);
+                chain[i].pathProgress = leadTargetProgress - (i * spacingProgress);
             }
+            ballChainManager.UpdateBallPositionsPublic();
         }
-
-        private void SpawnBall()
-        {
-            if (ballsSpawned >= maxBalls) return;
-
-            BallColor randomColor = GetRandomColor();
-            ballChainManager.SpawnBall(randomColor);
-            ballsSpawned++;
-
-            // Track recent colors (max 2)
-            recentColors.Add(randomColor);
-            if (recentColors.Count > 2)
-            {
-                recentColors.RemoveAt(0);
-            }
-
-            Debug.Log($"Spawned ball #{ballsSpawned} - Color: {randomColor}");
-        }
-
         private BallColor GetRandomColor()
         {
             if (colorCount <= 1)
-            {
                 return (BallColor)0;
-            }
 
             int attempts = 0;
             while (attempts < 10)
@@ -105,7 +146,6 @@ namespace YuumisProwl.BallChain
                 int colorIndex = Random.Range(0, colorCount);
                 BallColor candidate = (BallColor)colorIndex;
 
-                // If last two exist and are the same as candidate, try again
                 if (recentColors.Count == 2)
                 {
                     BallColor last = recentColors[recentColors.Count - 1];
@@ -116,11 +156,9 @@ namespace YuumisProwl.BallChain
                         continue;
                     }
                 }
-
                 return candidate;
             }
 
-            // Fallback: pick any color different from the last one if possible
             BallColor lastColor = recentColors.Count > 0 ? recentColors[recentColors.Count - 1] : (BallColor)(-1);
             for (int i = 0; i < colorCount; i++)
             {
@@ -130,22 +168,9 @@ namespace YuumisProwl.BallChain
             return (BallColor)0;
         }
 
-        /// <summary>
-        /// Sets the number of different colors to use.
-        /// </summary>
         public void SetColorCount(int count)
         {
             colorCount = Mathf.Clamp(count, 1, 6);
-        }
-
-        /// <summary>
-        /// Resets the spawner.
-        /// </summary>
-        public void Reset()
-        {
-            ballsSpawned = 0;
-            spawnTimer = 0f;
-            recentColors.Clear();
         }
     }
 }

@@ -593,6 +593,19 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Public wrapper so external systems (like intro animation) can update visuals.
+        /// </summary>
+        public void UpdateBallPositionsPublic()
+        {
+            UpdateBallPositions();
+        }
+
+        public float GetPathLength()
+        {
+            return pathController != null ? pathController.GetPathLength() : 0f;
+        }
+
+        /// <summary>
         /// Clears all balls from the chain.
         /// </summary>
         public void ClearChain()

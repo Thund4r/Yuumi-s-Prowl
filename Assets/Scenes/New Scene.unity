@@ -785,12 +785,33 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ballChainManager: {fileID: 1842243456}
-  spawnInterval: 1
-  maxBalls: 30
-  spawnOnStart: 1
+  ballCount: 30
   colorCount: 4
-  autoSpawn: 1
-  spawnKey: 32
+  introDuration: 6
+  introSpeedCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 0
+      outSlope: 0
+      tangentMode: 0
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
 --- !u!114 &1842243456
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -810,6 +831,8 @@ MonoBehaviour:
   gapCloseSpeed: 5
   destructionDelay: 0.1
   enableDestructionEffects: 1
+  recoilDistance: 0.5
+  recoilDuration: 0.15
   initialPoolSize: 50
 --- !u!4 &1842243457
 Transform:
@@ -841,6 +864,7 @@ MonoBehaviour:
   projectilePrefab: {fileID: 3653862568495902166, guid: 57c939778425c21409d9afb4c5107851, type: 3}
   ballChainManager: {fileID: 1842243456}
   spawnPoint: {fileID: 776678608}
+  ballSpawner: {fileID: 1842243455}
   spawnCooldown: 0.5
   initialPoolSize: 20
   colorCount: 4

@@ -14,6 +14,7 @@ namespace YuumisProwl.Projectile
         [SerializeField] private Projectile projectilePrefab;
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private Transform spawnPoint;
+        [SerializeField] private BallSpawner ballSpawner;
 
         [Header("Spawn Settings")]
         [SerializeField] private float spawnCooldown = 0.5f;
@@ -91,6 +92,8 @@ namespace YuumisProwl.Projectile
         /// </summary>
         private void HandleInput()
         {
+            if (ballSpawner != null && ballSpawner.IsPlayingIntro) return;
+
             bool shouldShoot = false;
             Vector3 worldTarget = Vector3.zero;
             Camera cam = Camera.main;
