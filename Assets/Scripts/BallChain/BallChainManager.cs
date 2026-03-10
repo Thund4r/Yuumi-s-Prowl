@@ -29,6 +29,12 @@ namespace YuumisProwl.BallChain
         [Header("Pool Settings")]
         [SerializeField] private int initialPoolSize = 50;
 
+        [Header("Spawn Hole Settings")]
+        [SerializeField] private float holeProgress = 0f; // Progress at which balls disappear/appear
+        [SerializeField] private int continuousColorCount = 4;
+
+        private List<BallColor> recentSpawnColors = new List<BallColor>(2);
+
         // Events
         public System.Action<int, BallColor> OnBallsDestroyed;
         public System.Action OnChainCleared;
@@ -81,6 +87,8 @@ namespace YuumisProwl.BallChain
             if (isMoving)
             {
                 MoveChain(Time.deltaTime);
+                EnsureTailBalls();
+                UpdateBallVisibility();
                 UpdateBallPositions();
             }
         }
@@ -152,13 +160,12 @@ namespace YuumisProwl.BallChain
         {
             foreach (var node in ballChain)
             {
-                if (node.ball != null)
+                if (node.ball != null && node.ball.gameObject.activeSelf)
                 {
-                    node.ball.transform.position = pathController.GetPointOnPath(node.pathProgress);
+                    node.ball.transform.position = pathController.GetPointOnPath(Mathf.Max(node.pathProgress, holeProgress));
                     node.ball.PathProgress = node.pathProgress;
 
-                    // Orient ball along path direction
-                    Vector3 direction = pathController.GetDirectionOnPath(node.pathProgress);
+                    Vector3 direction = pathController.GetDirectionOnPath(Mathf.Max(node.pathProgress, holeProgress));
                     if (direction != Vector3.zero)
                     {
                         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -504,14 +511,8 @@ namespace YuumisProwl.BallChain
 
             float recoilProgress = recoilDistance / pathLength;
 
-            // Ensure we don't move the lead ball before start of path
-            float maxAllowedRecoil = ballChain[0].pathProgress; // lead ball progress
-            recoilProgress = Mathf.Min(recoilProgress, maxAllowedRecoil);
-            if (recoilProgress <= 0f) yield break;
-
-            // Snapshot the current chain to guard against the list changing during recoil
+            // Don't clamp to lead ball anymore — allow balls to go past holeProgress
             BallNode[] snapshot = ballChain.ToArray();
-            // Record original progresses from snapshot
             float[] original = new float[snapshot.Length];
             for (int i = 0; i < snapshot.Length; i++) original[i] = snapshot[i].pathProgress;
 
@@ -523,22 +524,22 @@ namespace YuumisProwl.BallChain
 
                 for (int i = 0; i < snapshot.Length; i++)
                 {
-                    // Update snapshot node progress (safe even if underlying list changes)
                     snapshot[i].pathProgress = original[i] - recoilProgress * lerp;
                 }
 
-                // Update visuals based on current ballChain state
+                UpdateBallVisibility();
                 UpdateBallPositions();
 
                 elapsed += Time.deltaTime;
                 yield return null;
             }
 
-            // Finalize
             for (int i = 0; i < snapshot.Length; i++)
             {
                 snapshot[i].pathProgress = original[i] - recoilProgress;
             }
+
+            UpdateBallVisibility();
             UpdateBallPositions();
         }
 
@@ -566,6 +567,92 @@ namespace YuumisProwl.BallChain
             }
 
             UpdateChainIndices();
+        }
+
+        /// <summary>
+        /// Continuously spawns balls at the tail to keep the chain fed.
+        /// Called every frame from Update when the chain is moving.
+        /// </summary>
+        private void EnsureTailBalls()
+        {
+            if (ballChain.Count == 0) return;
+
+            float pathLength = pathController.GetPathLength();
+            if (pathLength <= 0f) return;
+
+            float spacingProgress = ballSpacing / pathLength;
+
+            // Check if the tail ball has moved far enough that we need a new one behind it
+            BallNode tail = ballChain[ballChain.Count - 1];
+
+            if (tail.pathProgress > holeProgress + spacingProgress)
+            {
+                // Spawn a new ball behind the tail
+                BallColor color = GetContinuousColor();
+                Ball ball = ballPool.Get();
+                ball.Initialize(color);
+                ball.OnGetFromPool();
+
+                float newProgress = tail.pathProgress - spacingProgress;
+                BallNode newNode = new BallNode(ball, newProgress, ballChain.Count);
+                ballChain.Add(newNode);
+                UpdateChainIndices();
+
+                // Hide it if it's still in the hole
+                UpdateBallVisibility(newNode);
+            }
+        }
+
+        /// <summary>
+        /// Updates visibility of all balls based on whether they're past the hole.
+        /// </summary>
+        private void UpdateBallVisibility()
+        {
+            foreach (var node in ballChain)
+            {
+                UpdateBallVisibility(node);
+            }
+        }
+
+        private void UpdateBallVisibility(BallNode node)
+        {
+            if (node.ball == null) return;
+
+            bool shouldBeVisible = node.pathProgress >= holeProgress;
+            if (node.ball.gameObject.activeSelf != shouldBeVisible)
+            {
+                node.ball.gameObject.SetActive(shouldBeVisible);
+            }
+        }
+
+        private BallColor GetContinuousColor()
+        {
+            int attempts = 0;
+            while (attempts < 10)
+            {
+                int colorIndex = Random.Range(0, continuousColorCount);
+                BallColor candidate = (BallColor)colorIndex;
+
+                if (recentSpawnColors.Count == 2)
+                {
+                    BallColor last = recentSpawnColors[recentSpawnColors.Count - 1];
+                    BallColor secondLast = recentSpawnColors[recentSpawnColors.Count - 2];
+                    if (last == secondLast && last == candidate)
+                    {
+                        attempts++;
+                        continue;
+                    }
+                }
+
+                recentSpawnColors.Add(candidate);
+                if (recentSpawnColors.Count > 2) recentSpawnColors.RemoveAt(0);
+                return candidate;
+            }
+
+            BallColor fallback = (BallColor)Random.Range(0, continuousColorCount);
+            recentSpawnColors.Add(fallback);
+            if (recentSpawnColors.Count > 2) recentSpawnColors.RemoveAt(0);
+            return fallback;
         }
 
         /// <summary>
