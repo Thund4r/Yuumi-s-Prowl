@@ -23,7 +23,9 @@ namespace YuumisProwl.BallChain
         [SerializeField] private float gapCloseSpeed = 5f;
         [SerializeField] private float destructionDelay = 0.1f;
         [SerializeField] private bool enableDestructionEffects = true;
-        [SerializeField] private float recoilDistance = 0.5f;
+        [SerializeField] private float baseRecoilDistance = 0.3f;
+        [SerializeField] private float recoilScalePerMatch = 0.2f;
+        [SerializeField] private float maxRecoilDistance = 2f;
         [SerializeField] private float recoilDuration = 0.15f;
 
         [Header("Pool Settings")]
@@ -31,7 +33,7 @@ namespace YuumisProwl.BallChain
 
         [Header("Spawn Hole Settings")]
         [SerializeField] private float holeProgress = 0f; // Progress at which balls disappear/appear
-        [SerializeField] private int continuousColorCount = 4;
+        [SerializeField] private BallSpawner ballSpawner;
 
         private List<BallColor> recentSpawnColors = new List<BallColor>(2);
 
@@ -79,6 +81,11 @@ namespace YuumisProwl.BallChain
             {
                 Debug.LogError("BallChainManager: PathController not assigned!");
                 enabled = false;
+            }
+            // If no BallSpawner reference assigned in inspector, find one in scene
+            if (ballSpawner == null)
+            {
+                ballSpawner = FindObjectOfType<BallSpawner>();
             }
         }
 
@@ -410,21 +417,20 @@ namespace YuumisProwl.BallChain
         /// </summary>
         private IEnumerator ProcessMatches(List<BallNode> matchedBalls)
         {
+            int matchCount = 0;
+
             while (matchedBalls.Count > 0)
             {
-                // Get gap index before removal
                 int gapIndex = matchDetector.GetGapIndexAfterRemoval(ballChain, matchedBalls);
                 BallColor matchedColor = matchedBalls[0].ball.BallColor;
-                int matchCount = matchedBalls.Count;
+                int destroyedCount = matchedBalls.Count;
 
-                // Remove the matched balls
                 RemoveBalls(matchedBalls);
+                matchCount++;
 
-                // Notify listeners (for scoring)
-                OnBallsDestroyed?.Invoke(matchCount, matchedColor);
-                Debug.Log($"Destroyed {matchCount} {matchedColor} balls!");
+                OnBallsDestroyed?.Invoke(destroyedCount, matchedColor);
+                Debug.Log($"Destroyed {destroyedCount} {matchedColor} balls!");
 
-                // Check if chain is cleared
                 if (ballChain.Count == 0)
                 {
                     OnChainCleared?.Invoke();
@@ -432,16 +438,12 @@ namespace YuumisProwl.BallChain
                     yield break;
                 }
 
-                // Close the gap (wait until spacing has settled)
+                // Close the gap
                 yield return StartCoroutine(CloseGap(gapIndex));
 
-                // Only apply recoil when the gap is not at the very front of the line.
-                // If gapIndex == 0, there are no balls ahead that were pushed back,
-                // so no recoil should occur.
-                if (gapIndex > 0)
-                {
-                    yield return StartCoroutine(ApplyChainRecoil());
-                }
+                // Apply scaled recoil after every match
+                float recoil = CalculateRecoilDistance(matchCount);
+                yield return StartCoroutine(ApplyChainRecoil(recoil));
 
                 // Check for cascade matches
                 if (gapIndex >= 0 && gapIndex < ballChain.Count)
@@ -454,9 +456,19 @@ namespace YuumisProwl.BallChain
                 }
                 else
                 {
-                    break; // No more cascades possible
+                    break;
                 }
             }
+        }
+
+        /// <summary>
+        /// Calculates recoil distance based on the current match number in the cascade.
+        /// Match 1 = baseRecoilDistance, each subsequent match adds recoilScalePerMatch.
+        /// </summary>
+        private float CalculateRecoilDistance(int matchNumber)
+        {
+            float recoil = baseRecoilDistance + (matchNumber - 1) * recoilScalePerMatch;
+            return Mathf.Min(recoil, maxRecoilDistance);
         }
 
         /// <summary>
@@ -498,20 +510,19 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Applies a recoil to the entire chain by moving every ball backward
-        /// along the path by a fixed world distance (smoothed over time).
+        /// Applies a recoil to the entire chain by a given distance.
+        /// Can be called externally by power-ups or other game systems.
         /// </summary>
-        private IEnumerator ApplyChainRecoil()
+        public IEnumerator ApplyChainRecoil(float distance)
         {
             if (ballChain.Count == 0) yield break;
-            if (recoilDistance <= 0f) yield break;
+            if (distance <= 0f) yield break;
 
             float pathLength = pathController.GetPathLength();
             if (pathLength <= 0f) yield break;
 
-            float recoilProgress = recoilDistance / pathLength;
+            float recoilProgress = distance / pathLength;
 
-            // Don't clamp to lead ball anymore — allow balls to go past holeProgress
             BallNode[] snapshot = ballChain.ToArray();
             float[] original = new float[snapshot.Length];
             for (int i = 0; i < snapshot.Length; i++) original[i] = snapshot[i].pathProgress;
@@ -630,7 +641,8 @@ namespace YuumisProwl.BallChain
             int attempts = 0;
             while (attempts < 10)
             {
-                int colorIndex = Random.Range(0, continuousColorCount);
+                int maxColors = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
+                int colorIndex = Random.Range(0, maxColors);
                 BallColor candidate = (BallColor)colorIndex;
 
                 if (recentSpawnColors.Count == 2)
@@ -649,7 +661,8 @@ namespace YuumisProwl.BallChain
                 return candidate;
             }
 
-            BallColor fallback = (BallColor)Random.Range(0, continuousColorCount);
+            int fallbackMax = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
+            BallColor fallback = (BallColor)Random.Range(0, fallbackMax);
             recentSpawnColors.Add(fallback);
             if (recentSpawnColors.Count > 2) recentSpawnColors.RemoveAt(0);
             return fallback;

@@ -345,7 +345,7 @@ Transform:
   m_GameObject: {fileID: 1068833478}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -0.03, y: 3, z: -10}
+  m_LocalPosition: {x: -0.03, y: 3, z: -12}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -834,6 +834,8 @@ MonoBehaviour:
   recoilDistance: 0.5
   recoilDuration: 0.15
   initialPoolSize: 50
+  holeProgress: 0
+  continuousColorCount: 4
 --- !u!4 &1842243457
 Transform:
   m_ObjectHideFlags: 0

@@ -19,7 +19,7 @@ namespace YuumisProwl.Projectile
         [Header("Spawn Settings")]
         [SerializeField] private float spawnCooldown = 0.5f;
         [SerializeField] private int initialPoolSize = 20;
-        [SerializeField] private int colorCount = 4;
+        // Color count is sourced from the canonical BallSpawner when available
 
         [Header("Test Mode")]
         [SerializeField] private bool randomColors = true;
@@ -208,7 +208,8 @@ namespace YuumisProwl.Projectile
         {
             if (randomColors)
             {
-                int colorIndex = Random.Range(0, colorCount);
+                int maxColors = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
+                int colorIndex = Random.Range(0, maxColors);
                 return (BallColor)colorIndex;
             }
             return fixedColor;
@@ -236,7 +237,10 @@ namespace YuumisProwl.Projectile
         /// </summary>
         public void SetColorCount(int count)
         {
-            colorCount = Mathf.Clamp(count, 1, 6);
+            if (ballSpawner != null)
+            {
+                ballSpawner.SetColorCount(count);
+            }
         }
 
         /// <summary>

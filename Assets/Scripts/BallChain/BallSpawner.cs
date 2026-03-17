@@ -22,6 +22,9 @@ namespace YuumisProwl.BallChain
 
         private List<BallColor> recentColors = new List<BallColor>(2);
 
+        // Expose the configured color count so other systems can read the canonical value
+        public int ColorCount => colorCount;
+
         /// <summary>
         /// True while the intro animation is playing. 
         /// Other systems (e.g. ProjectileSpawner) should check this to block input.
