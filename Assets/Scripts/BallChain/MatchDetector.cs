@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using YuumisProwl;
 
 namespace YuumisProwl.BallChain
 {
@@ -15,17 +16,17 @@ namespace YuumisProwl.BallChain
         /// Detects matches starting from a specific index in the chain.
         /// Used after ball insertion to check if a match was created.
         /// </summary>
-        public List<BallChainManager.BallNode> DetectMatchAtIndex(
-            List<BallChainManager.BallNode> chain,
+        public List<BallNode> DetectMatchAtIndex(
+            List<BallNode> chain,
             int centerIndex)
         {
             if (chain == null || chain.Count == 0 || centerIndex < 0 || centerIndex >= chain.Count)
             {
-                return new List<BallChainManager.BallNode>();
+                return new List<BallNode>();
             }
 
             BallColor targetColor = chain[centerIndex].ball.BallColor;
-            List<BallChainManager.BallNode> matchedBalls = new List<BallChainManager.BallNode>();
+            List<BallNode> matchedBalls = new List<BallNode>();
 
             // Expand left from center
             int leftIndex = centerIndex;
@@ -62,13 +63,13 @@ namespace YuumisProwl.BallChain
         /// Detects cascade matches after a gap has been closed.
         /// Checks if the balls on either side of the gap now match.
         /// </summary>
-        public List<BallChainManager.BallNode> DetectCascadeMatch(
-            List<BallChainManager.BallNode> chain,
+        public List<BallNode> DetectCascadeMatch(
+            List<BallNode> chain,
             int gapIndex)
         {
             if (chain == null || chain.Count == 0 || gapIndex < 0 || gapIndex >= chain.Count)
             {
-                return new List<BallChainManager.BallNode>();
+                return new List<BallNode>();
             }
 
             // Check for matches at the point where the gap was closed
@@ -79,10 +80,10 @@ namespace YuumisProwl.BallChain
         /// Detects all matches in the entire chain.
         /// Used for initial level validation or debugging.
         /// </summary>
-        public List<List<BallChainManager.BallNode>> DetectAllMatches(
-            List<BallChainManager.BallNode> chain)
+        public List<List<BallNode>> DetectAllMatches(
+            List<BallNode> chain)
         {
-            List<List<BallChainManager.BallNode>> allMatches = new List<List<BallChainManager.BallNode>>();
+            List<List<BallNode>> allMatches = new List<List<BallNode>>();
 
             if (chain == null || chain.Count < MIN_MATCH_COUNT)
             {
@@ -108,7 +109,7 @@ namespace YuumisProwl.BallChain
                 // If we have a match, add it
                 if (matchCount >= MIN_MATCH_COUNT)
                 {
-                    List<BallChainManager.BallNode> match = new List<BallChainManager.BallNode>();
+                    List<BallNode> match = new List<BallNode>();
                     for (int j = matchStart; j <= matchEnd; j++)
                     {
                         match.Add(chain[j]);
@@ -128,8 +129,8 @@ namespace YuumisProwl.BallChain
         /// Returns the index where the gap would be (for cascade checking).
         /// </summary>
         public int GetGapIndexAfterRemoval(
-            List<BallChainManager.BallNode> chain,
-            List<BallChainManager.BallNode> ballsToRemove)
+            List<BallNode> chain,
+            List<BallNode> ballsToRemove)
         {
             if (chain == null || ballsToRemove == null || ballsToRemove.Count == 0)
             {
@@ -147,7 +148,7 @@ namespace YuumisProwl.BallChain
         /// <summary>
         /// Validates if a match list is valid (no duplicates, all same color, min count).
         /// </summary>
-        public bool IsValidMatch(List<BallChainManager.BallNode> match)
+        public bool IsValidMatch(List<BallNode> match)
         {
             if (match == null || match.Count < MIN_MATCH_COUNT)
             {

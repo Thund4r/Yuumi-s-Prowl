@@ -1,4 +1,4 @@
-namespace YuumisProwl.BallChain
+namespace YuumisProwl
 {
     /// <summary>
     /// Defines the available ball colors in the game.

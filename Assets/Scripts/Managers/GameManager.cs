@@ -1,4 +1,5 @@
 using UnityEngine;
+using YuumisProwl;
 using YuumisProwl.BallChain;
 
 namespace YuumisProwl.Managers
@@ -10,6 +11,7 @@ namespace YuumisProwl.Managers
     {
         [Header("References")]
         [SerializeField] private BallChainManager ballChainManager;
+        [SerializeField] private MatchProcessor matchProcessor;
 
         [Header("Game Settings")]
         [SerializeField] private int targetScore = 1000;
@@ -41,9 +43,13 @@ namespace YuumisProwl.Managers
                 return;
             }
 
-            // Subscribe to ball chain events
-            ballChainManager.OnBallsDestroyed += HandleBallsDestroyed;
-            ballChainManager.OnChainCleared += HandleChainCleared;
+            if (matchProcessor == null)
+            {
+                Debug.LogError("GameManager: MatchProcessor not assigned!");
+                return;
+            }
+            matchProcessor.OnBallsDestroyed += HandleBallsDestroyed;
+            matchProcessor.OnChainCleared += HandleChainCleared;
             ballChainManager.OnBallReachedEnd += HandleBallReachedEnd;
 
             InitializeGame();
@@ -51,10 +57,13 @@ namespace YuumisProwl.Managers
 
         private void OnDestroy()
         {
+            if (matchProcessor != null)
+            {
+                matchProcessor.OnBallsDestroyed -= HandleBallsDestroyed;
+                matchProcessor.OnChainCleared -= HandleChainCleared;
+            }
             if (ballChainManager != null)
             {
-                ballChainManager.OnBallsDestroyed -= HandleBallsDestroyed;
-                ballChainManager.OnChainCleared -= HandleChainCleared;
                 ballChainManager.OnBallReachedEnd -= HandleBallReachedEnd;
             }
         }

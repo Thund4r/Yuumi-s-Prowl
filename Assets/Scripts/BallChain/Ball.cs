@@ -1,4 +1,5 @@
 using UnityEngine;
+using YuumisProwl;
 
 namespace YuumisProwl.BallChain
 {
@@ -71,32 +72,7 @@ namespace YuumisProwl.BallChain
             if (ballMaterial == null) return;
 
             // Set material color based on ball color
-            ballMaterial.color = GetColorFromEnum(ballColor);
-        }
-
-        /// <summary>
-        /// Converts BallColor enum to Unity Color for visualization.
-        /// Replace with material/texture assignment in production.
-        /// </summary>
-        private Color GetColorFromEnum(BallColor ballColor)
-        {
-            switch (ballColor)
-            {
-                case BallColor.Red:
-                    return new Color(1f, 0.2f, 0.2f);
-                case BallColor.Blue:
-                    return new Color(0.2f, 0.5f, 1f);
-                case BallColor.Green:
-                    return new Color(0.3f, 1f, 0.3f);
-                case BallColor.Yellow:
-                    return new Color(1f, 1f, 0.3f);
-                case BallColor.Purple:
-                    return new Color(0.8f, 0.3f, 1f);
-                case BallColor.Orange:
-                    return new Color(1f, 0.6f, 0.2f);
-                default:
-                    return Color.white;
-            }
+            ballMaterial.color = BallColorUtils.ToUnityColor(ballColor);
         }
 
         /// <summary>

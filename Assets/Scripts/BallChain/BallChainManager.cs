@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using YuumisProwl;
 using YuumisProwl.Utilities;
 
 namespace YuumisProwl.BallChain
@@ -19,60 +20,30 @@ namespace YuumisProwl.BallChain
         [SerializeField] private float ballSpeed = 2f;
         [SerializeField] private float ballSpacing = 0.5f;
 
-        [Header("Match Settings")]
+        [Header("Gap Close Settings")]
         [SerializeField] private float gapCloseSpeed = 5f;
-        [SerializeField] private float destructionDelay = 0.1f;
-        [SerializeField] private bool enableDestructionEffects = true;
-        [SerializeField] private float baseRecoilDistance = 0.3f;
-        [SerializeField] private float recoilScalePerMatch = 0.2f;
-        [SerializeField] private float maxRecoilDistance = 2f;
-        [SerializeField] private float recoilDuration = 0.15f;
 
         [Header("Pool Settings")]
         [SerializeField] private int initialPoolSize = 50;
 
         [Header("Spawn Hole Settings")]
         [SerializeField] private float holeProgress = 0f; // Progress at which balls disappear/appear
-        [SerializeField] private BallSpawner ballSpawner;
-
-        private List<BallColor> recentSpawnColors = new List<BallColor>(2);
 
         // Events
-        public System.Action<int, BallColor> OnBallsDestroyed;
-        public System.Action OnChainCleared;
         public System.Action OnBallReachedEnd;
-
-        // Ball chain data structure
-        [System.Serializable]
-        public class BallNode
-        {
-            public Ball ball;
-            public float pathProgress;
-            public int chainIndex;
-
-            public BallNode(Ball ball, float pathProgress, int chainIndex)
-            {
-                this.ball = ball;
-                this.pathProgress = pathProgress;
-                this.chainIndex = chainIndex;
-            }
-        }
+        public System.Action<int> OnBallInserted;
 
         private List<BallNode> ballChain = new List<BallNode>();
         private ObjectPool<Ball> ballPool;
-        private MatchDetector matchDetector;
         private bool isMoving = true;
-        private bool isProcessingMatches = false;
 
         public float BallSpeed => ballSpeed;
         public float BallSpacing => ballSpacing;
         public int BallCount => ballChain.Count;
-        public bool IsProcessingMatches => isProcessingMatches;
 
         private void Awake()
         {
             InitializePool();
-            matchDetector = new MatchDetector();
         }
 
         private void Start()
@@ -82,11 +53,6 @@ namespace YuumisProwl.BallChain
                 Debug.LogError("BallChainManager: PathController not assigned!");
                 enabled = false;
             }
-            // If no BallSpawner reference assigned in inspector, find one in scene
-            if (ballSpawner == null)
-            {
-                ballSpawner = FindObjectOfType<BallSpawner>();
-            }
         }
 
         private void Update()
@@ -94,7 +60,6 @@ namespace YuumisProwl.BallChain
             if (isMoving)
             {
                 MoveChain(Time.deltaTime);
-                EnsureTailBalls();
                 UpdateBallVisibility();
                 UpdateBallPositions();
             }
@@ -300,7 +265,7 @@ namespace YuumisProwl.BallChain
 
             Debug.Log($"Inserted ball at index {insertIndex} - Color: {color}");
 
-            StartCoroutine(CheckMatchesAfterInsertion(insertIndex));
+            OnBallInserted?.Invoke(insertIndex);
         }
 
         /// <summary>
@@ -392,169 +357,6 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Checks for matches after ball insertion and handles cascades.
-        /// </summary>
-        private IEnumerator CheckMatchesAfterInsertion(int insertedIndex)
-        {
-            if (isProcessingMatches) yield break;
-
-            isProcessingMatches = true;
-            yield return new WaitForSeconds(destructionDelay);
-
-            // Check for matches at the inserted position
-            List<BallNode> matchedBalls = matchDetector.DetectMatchAtIndex(ballChain, insertedIndex);
-
-            if (matchedBalls.Count > 0)
-            {
-                yield return StartCoroutine(ProcessMatches(matchedBalls));
-            }
-
-            isProcessingMatches = false;
-        }
-
-        /// <summary>
-        /// Processes matched balls, removes them, and checks for cascades.
-        /// </summary>
-        private IEnumerator ProcessMatches(List<BallNode> matchedBalls)
-        {
-            int matchCount = 0;
-
-            while (matchedBalls.Count > 0)
-            {
-                int gapIndex = matchDetector.GetGapIndexAfterRemoval(ballChain, matchedBalls);
-                BallColor matchedColor = matchedBalls[0].ball.BallColor;
-                int destroyedCount = matchedBalls.Count;
-
-                RemoveBalls(matchedBalls);
-                matchCount++;
-
-                OnBallsDestroyed?.Invoke(destroyedCount, matchedColor);
-                Debug.Log($"Destroyed {destroyedCount} {matchedColor} balls!");
-
-                if (ballChain.Count == 0)
-                {
-                    OnChainCleared?.Invoke();
-                    Debug.Log("All balls cleared! Level Complete!");
-                    yield break;
-                }
-
-                // Close the gap
-                yield return StartCoroutine(CloseGap(gapIndex));
-
-                // Apply scaled recoil after every match
-                float recoil = CalculateRecoilDistance(matchCount);
-                yield return StartCoroutine(ApplyChainRecoil(recoil));
-
-                // Check for cascade matches
-                if (gapIndex >= 0 && gapIndex < ballChain.Count)
-                {
-                    matchedBalls = matchDetector.DetectCascadeMatch(ballChain, gapIndex);
-                    if (matchedBalls.Count > 0)
-                    {
-                        Debug.Log($"Cascade match found! {matchedBalls.Count} more balls!");
-                    }
-                }
-                else
-                {
-                    break;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Calculates recoil distance based on the current match number in the cascade.
-        /// Match 1 = baseRecoilDistance, each subsequent match adds recoilScalePerMatch.
-        /// </summary>
-        private float CalculateRecoilDistance(int matchNumber)
-        {
-            float recoil = baseRecoilDistance + (matchNumber - 1) * recoilScalePerMatch;
-            return Mathf.Min(recoil, maxRecoilDistance);
-        }
-
-        /// <summary>
-        /// Closes the gap after ball removal.
-        /// MoveChain handles the actual closing, this just pauses briefly.
-        /// </summary>
-        private IEnumerator CloseGap(int gapIndex)
-        {
-
-            // If gapIndex is invalid or chain too small, nothing to wait for
-            if (gapIndex <= 0 || gapIndex >= ballChain.Count) yield break;
-
-            float pathLength = pathController.GetPathLength();
-            if (pathLength <= 0f) yield break;
-
-            float spacingProgress = ballSpacing / pathLength;
-
-            float timeout = 1.0f; // safety timeout in seconds
-            float elapsed = 0f;
-
-            // Wait until the spacing between the ball ahead of the gap and the ball at the gap
-            // reaches the expected spacing (within a small epsilon), or until timeout.
-            while (elapsed < timeout)
-            {
-                if (gapIndex <= 0 || gapIndex >= ballChain.Count) break;
-
-                float desired = ballChain[gapIndex].pathProgress + spacingProgress;
-                float current = ballChain[gapIndex - 1].pathProgress;
-
-                if (Mathf.Abs(current - desired) <= 0.0005f)
-                {
-                    // Spacing settled
-                    break;
-                }
-
-                elapsed += Time.deltaTime;
-                yield return null;
-            }
-        }
-
-        /// <summary>
-        /// Applies a recoil to the entire chain by a given distance.
-        /// Can be called externally by power-ups or other game systems.
-        /// </summary>
-        public IEnumerator ApplyChainRecoil(float distance)
-        {
-            if (ballChain.Count == 0) yield break;
-            if (distance <= 0f) yield break;
-
-            float pathLength = pathController.GetPathLength();
-            if (pathLength <= 0f) yield break;
-
-            float recoilProgress = distance / pathLength;
-
-            BallNode[] snapshot = ballChain.ToArray();
-            float[] original = new float[snapshot.Length];
-            for (int i = 0; i < snapshot.Length; i++) original[i] = snapshot[i].pathProgress;
-
-            float elapsed = 0f;
-            while (elapsed < recoilDuration)
-            {
-                float t = elapsed / recoilDuration;
-                float lerp = Mathf.SmoothStep(0f, 1f, t);
-
-                for (int i = 0; i < snapshot.Length; i++)
-                {
-                    snapshot[i].pathProgress = original[i] - recoilProgress * lerp;
-                }
-
-                UpdateBallVisibility();
-                UpdateBallPositions();
-
-                elapsed += Time.deltaTime;
-                yield return null;
-            }
-
-            for (int i = 0; i < snapshot.Length; i++)
-            {
-                snapshot[i].pathProgress = original[i] - recoilProgress;
-            }
-
-            UpdateBallVisibility();
-            UpdateBallPositions();
-        }
-
-        /// <summary>
         /// Removes balls from the chain and returns them to the pool.
         /// </summary>
         public void RemoveBalls(List<BallNode> nodesToRemove)
@@ -563,14 +365,6 @@ namespace YuumisProwl.BallChain
             {
                 if (node.ball != null)
                 {
-                    // Play destruction effect (optional - can be enhanced with particle systems)
-                    if (enableDestructionEffects)
-                    {
-                        // Simple scale-down animation before removal
-                        // In production, you'd spawn a particle effect here
-                        Debug.Log($"💥 Destroying {node.ball.BallColor} ball at position {node.ball.transform.position}");
-                    }
-
                     ballPool.Return(node.ball);
                     node.ball.OnReturnToPool();
                 }
@@ -578,40 +372,6 @@ namespace YuumisProwl.BallChain
             }
 
             UpdateChainIndices();
-        }
-
-        /// <summary>
-        /// Continuously spawns balls at the tail to keep the chain fed.
-        /// Called every frame from Update when the chain is moving.
-        /// </summary>
-        private void EnsureTailBalls()
-        {
-            if (ballChain.Count == 0) return;
-
-            float pathLength = pathController.GetPathLength();
-            if (pathLength <= 0f) return;
-
-            float spacingProgress = ballSpacing / pathLength;
-
-            // Check if the tail ball has moved far enough that we need a new one behind it
-            BallNode tail = ballChain[ballChain.Count - 1];
-
-            if (tail.pathProgress > holeProgress + spacingProgress)
-            {
-                // Spawn a new ball behind the tail
-                BallColor color = GetContinuousColor();
-                Ball ball = ballPool.Get();
-                ball.Initialize(color);
-                ball.OnGetFromPool();
-
-                float newProgress = tail.pathProgress - spacingProgress;
-                BallNode newNode = new BallNode(ball, newProgress, ballChain.Count);
-                ballChain.Add(newNode);
-                UpdateChainIndices();
-
-                // Hide it if it's still in the hole
-                UpdateBallVisibility(newNode);
-            }
         }
 
         /// <summary>
@@ -634,38 +394,6 @@ namespace YuumisProwl.BallChain
             {
                 node.ball.gameObject.SetActive(shouldBeVisible);
             }
-        }
-
-        private BallColor GetContinuousColor()
-        {
-            int attempts = 0;
-            while (attempts < 10)
-            {
-                int maxColors = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
-                int colorIndex = Random.Range(0, maxColors);
-                BallColor candidate = (BallColor)colorIndex;
-
-                if (recentSpawnColors.Count == 2)
-                {
-                    BallColor last = recentSpawnColors[recentSpawnColors.Count - 1];
-                    BallColor secondLast = recentSpawnColors[recentSpawnColors.Count - 2];
-                    if (last == secondLast && last == candidate)
-                    {
-                        attempts++;
-                        continue;
-                    }
-                }
-
-                recentSpawnColors.Add(candidate);
-                if (recentSpawnColors.Count > 2) recentSpawnColors.RemoveAt(0);
-                return candidate;
-            }
-
-            int fallbackMax = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
-            BallColor fallback = (BallColor)Random.Range(0, fallbackMax);
-            recentSpawnColors.Add(fallback);
-            if (recentSpawnColors.Count > 2) recentSpawnColors.RemoveAt(0);
-            return fallback;
         }
 
         /// <summary>
@@ -698,6 +426,26 @@ namespace YuumisProwl.BallChain
         public void UpdateBallPositionsPublic()
         {
             UpdateBallPositions();
+        }
+
+        public void UpdateBallVisibilityPublic()
+        {
+            UpdateBallVisibility();
+        }
+
+        /// <summary>
+        /// Returns true when the tail ball has moved far enough that a new ball should be spawned behind it.
+        /// </summary>
+        public bool NeedsTailBall()
+        {
+            if (ballChain.Count == 0) return false;
+
+            float pathLength = pathController.GetPathLength();
+            if (pathLength <= 0f) return false;
+
+            float spacingProgress = ballSpacing / pathLength;
+            BallNode tail = ballChain[ballChain.Count - 1];
+            return tail.pathProgress > holeProgress + spacingProgress;
         }
 
         public float GetPathLength()

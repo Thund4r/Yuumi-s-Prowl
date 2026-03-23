@@ -1,4 +1,5 @@
 using UnityEngine;
+using YuumisProwl;
 using YuumisProwl.BallChain;
 using YuumisProwl.Utilities;
 
@@ -13,6 +14,7 @@ namespace YuumisProwl.Projectile
         [Header("References")]
         [SerializeField] private Projectile projectilePrefab;
         [SerializeField] private BallChainManager ballChainManager;
+        [SerializeField] private MatchProcessor matchProcessor;
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private BallSpawner ballSpawner;
 
@@ -146,7 +148,7 @@ namespace YuumisProwl.Projectile
             if (Time.time - lastSpawnTime < spawnCooldown) return;
 
             // Prevent shooting while the chain is processing matches (including recoil)
-            if (ballChainManager != null && ballChainManager.IsProcessingMatches) return;
+            if (matchProcessor != null && matchProcessor.IsProcessingMatches) return;
 
             // Prevent firing if a projectile is already in flight
             if (projectileInFlight) return;

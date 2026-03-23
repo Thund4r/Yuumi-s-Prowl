@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
+using YuumisProwl;
 
 namespace YuumisProwl.BallChain
 {
@@ -77,12 +78,8 @@ namespace YuumisProwl.BallChain
         {
             for (int i = 0; i < ballCount; i++)
             {
-                BallColor color = GetRandomColor();
+                BallColor color = BallColorUtils.GetRandomColor(colorCount, recentColors);
                 ballChainManager.SpawnBall(color);
-
-                recentColors.Add(color);
-                if (recentColors.Count > 2)
-                    recentColors.RemoveAt(0);
             }
 
             // Stack all balls at progress 0
@@ -138,37 +135,15 @@ namespace YuumisProwl.BallChain
             }
             ballChainManager.UpdateBallPositionsPublic();
         }
-        private BallColor GetRandomColor()
+        private void Update()
         {
-            if (colorCount <= 1)
-                return (BallColor)0;
+            if (IsPlayingIntro || ballChainManager == null) return;
 
-            int attempts = 0;
-            while (attempts < 10)
+            if (ballChainManager.NeedsTailBall())
             {
-                int colorIndex = Random.Range(0, colorCount);
-                BallColor candidate = (BallColor)colorIndex;
-
-                if (recentColors.Count == 2)
-                {
-                    BallColor last = recentColors[recentColors.Count - 1];
-                    BallColor secondLast = recentColors[recentColors.Count - 2];
-                    if (last == secondLast && last == candidate)
-                    {
-                        attempts++;
-                        continue;
-                    }
-                }
-                return candidate;
+                BallColor color = BallColorUtils.GetRandomColor(colorCount, recentColors);
+                ballChainManager.SpawnBall(color);
             }
-
-            BallColor lastColor = recentColors.Count > 0 ? recentColors[recentColors.Count - 1] : (BallColor)(-1);
-            for (int i = 0; i < colorCount; i++)
-            {
-                BallColor c = (BallColor)i;
-                if (c != lastColor) return c;
-            }
-            return (BallColor)0;
         }
 
         public void SetColorCount(int count)

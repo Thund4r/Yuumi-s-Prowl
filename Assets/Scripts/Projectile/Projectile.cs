@@ -1,4 +1,5 @@
 using UnityEngine;
+using YuumisProwl;
 using YuumisProwl.BallChain;
 
 namespace YuumisProwl.Projectile
@@ -162,39 +163,15 @@ namespace YuumisProwl.Projectile
 
             if (projectileMaterial != null)
             {
-                projectileMaterial.color = GetColorFromEnum(projectileColor);
+                projectileMaterial.color = BallColorUtils.ToUnityColor(projectileColor);
             }
 
             // Update trail color
             if (trailRenderer != null)
             {
-                Color trailColor = GetColorFromEnum(projectileColor);
+                Color trailColor = BallColorUtils.ToUnityColor(projectileColor);
                 trailRenderer.startColor = trailColor;
                 trailRenderer.endColor = new Color(trailColor.r, trailColor.g, trailColor.b, 0f);
-            }
-        }
-
-        /// <summary>
-        /// Converts BallColor enum to Unity Color.
-        /// </summary>
-        private Color GetColorFromEnum(BallColor ballColor)
-        {
-            switch (ballColor)
-            {
-                case BallColor.Red:
-                    return new Color(1f, 0.2f, 0.2f);
-                case BallColor.Blue:
-                    return new Color(0.2f, 0.5f, 1f);
-                case BallColor.Green:
-                    return new Color(0.3f, 1f, 0.3f);
-                case BallColor.Yellow:
-                    return new Color(1f, 1f, 0.3f);
-                case BallColor.Purple:
-                    return new Color(0.8f, 0.3f, 1f);
-                case BallColor.Orange:
-                    return new Color(1f, 0.6f, 0.2f);
-                default:
-                    return Color.white;
             }
         }
 
