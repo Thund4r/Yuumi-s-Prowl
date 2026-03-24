@@ -1,37 +1,31 @@
 using UnityEngine;
-using YuumisProwl;
 using YuumisProwl.BallChain;
 
 namespace YuumisProwl.Managers
 {
     /// <summary>
-    /// Main game manager handling game state, scoring, and win/lose conditions.
+    /// Handles game state and win/lose conditions.
+    /// Win conditions:
+    ///   1. Chain cleared and no more balls to spawn (all matched).
+    ///   2. No visible balls on screen (line retreated fully into hole).
+    /// Lose condition:
+    ///   Lead ball reaches the end of the path.
     /// </summary>
     public class GameManager : MonoBehaviour
     {
         [Header("References")]
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private MatchProcessor matchProcessor;
-
-        [Header("Game Settings")]
-        [SerializeField] private int targetScore = 1000;
-        [SerializeField] private int basePointsPerBall = 10;
-        [SerializeField] private float comboMultiplier = 1.5f;
+        [SerializeField] private BallSpawner ballSpawner;
 
         // Game state
-        private int currentScore = 0;
-        private int currentCombo = 0;
         private bool gameOver = false;
         private bool levelComplete = false;
 
         // Events
-        public System.Action<int> OnScoreChanged;
-        public System.Action<int> OnComboChanged;
         public System.Action OnGameWon;
         public System.Action OnGameLost;
 
-        public int CurrentScore => currentScore;
-        public int CurrentCombo => currentCombo;
         public bool IsGameOver => gameOver;
         public bool IsLevelComplete => levelComplete;
 
@@ -48,78 +42,60 @@ namespace YuumisProwl.Managers
                 Debug.LogError("GameManager: MatchProcessor not assigned!");
                 return;
             }
-            matchProcessor.OnBallsDestroyed += HandleBallsDestroyed;
+
             matchProcessor.OnChainCleared += HandleChainCleared;
             ballChainManager.OnBallReachedEnd += HandleBallReachedEnd;
 
             InitializeGame();
         }
 
-        private void OnDestroy()
-        {
-            if (matchProcessor != null)
-            {
-                matchProcessor.OnBallsDestroyed -= HandleBallsDestroyed;
-                matchProcessor.OnChainCleared -= HandleChainCleared;
-            }
-            if (ballChainManager != null)
-            {
-                ballChainManager.OnBallReachedEnd -= HandleBallReachedEnd;
-            }
-        }
-
-        private void InitializeGame()
-        {
-            currentScore = 0;
-            currentCombo = 0;
-            gameOver = false;
-            levelComplete = false;
-
-            OnScoreChanged?.Invoke(currentScore);
-            OnComboChanged?.Invoke(currentCombo);
-
-            Debug.Log($"Game Started! Target Score: {targetScore}");
-        }
-
-        /// <summary>
-        /// Handles ball destruction events and updates score.
-        /// </summary>
-        private void HandleBallsDestroyed(int count, BallColor color)
+        private void Update()
         {
             if (gameOver || levelComplete) return;
 
-            // Increment combo
-            currentCombo++;
-
-            // Calculate points with combo multiplier
-            int basePoints = count * basePointsPerBall;
-            float multiplier = 1f + (currentCombo - 1) * (comboMultiplier - 1f);
-            int points = Mathf.RoundToInt(basePoints * multiplier);
-
-            // Add to score
-            currentScore += points;
-
-            OnScoreChanged?.Invoke(currentScore);
-            OnComboChanged?.Invoke(currentCombo);
-
-            Debug.Log($"Score: +{points} (Combo x{currentCombo}) | Total: {currentScore}/{targetScore}");
-
-            // Check for win condition
-            if (currentScore >= targetScore)
+            // Win if every ball in the chain has retreated behind the hole (none visible).
+            // AllBallsSpawned is intentionally NOT checked here: recoil stops tail spawning
+            // before the total is reached, so that flag would never become true in this scenario.
+            bool introPlaying = ballSpawner != null && ballSpawner.IsPlayingIntro;
+            if (!introPlaying
+                && ballChainManager.BallCount > 0
+                && !ballChainManager.HasVisibleBalls())
             {
                 WinGame();
             }
         }
 
+        private void OnDestroy()
+        {
+            if (matchProcessor != null)
+                matchProcessor.OnChainCleared -= HandleChainCleared;
+            if (ballChainManager != null)
+                ballChainManager.OnBallReachedEnd -= HandleBallReachedEnd;
+        }
+
         /// <summary>
-        /// Handles chain cleared event (all balls destroyed).
+        /// Resets all in-game state. Called by LevelManager on level load.
+        /// </summary>
+        public void InitializeGame()
+        {
+            gameOver = false;
+            levelComplete = false;
+            Debug.Log("Game initialised.");
+        }
+
+        /// <summary>
+        /// Handles chain cleared event. Only wins if no more balls are queued —
+        /// otherwise the tail spawn will keep filling the chain.
         /// </summary>
         private void HandleChainCleared()
         {
             if (gameOver) return;
 
-            Debug.Log("Level Complete - All balls cleared!");
-            WinGame();
+            if (ballSpawner == null || ballSpawner.AllBallsSpawned)
+            {
+                Debug.Log("Level Complete — all balls cleared!");
+                WinGame();
+            }
         }
 
         /// <summary>
@@ -129,13 +105,10 @@ namespace YuumisProwl.Managers
         {
             if (gameOver || levelComplete) return;
 
-            Debug.LogWarning("Game Over - Ball reached the end!");
+            Debug.LogWarning("Game Over — ball reached the end!");
             LoseGame();
         }
 
-        /// <summary>
-        /// Triggers win condition.
-        /// </summary>
         private void WinGame()
         {
             if (gameOver || levelComplete) return;
@@ -144,15 +117,9 @@ namespace YuumisProwl.Managers
             gameOver = true;
 
             OnGameWon?.Invoke();
-
-            Debug.Log($"=== VICTORY ===");
-            Debug.Log($"Final Score: {currentScore}");
-            Debug.Log($"Max Combo: {currentCombo}");
+            Debug.Log("=== VICTORY ===");
         }
 
-        /// <summary>
-        /// Triggers lose condition.
-        /// </summary>
         private void LoseGame()
         {
             if (gameOver || levelComplete) return;
@@ -160,39 +127,19 @@ namespace YuumisProwl.Managers
             gameOver = true;
 
             OnGameLost?.Invoke();
-
-            Debug.Log($"=== GAME OVER ===");
-            Debug.Log($"Final Score: {currentScore}/{targetScore}");
+            Debug.Log("=== GAME OVER ===");
         }
 
         /// <summary>
-        /// Resets combo counter (called when no matches occur).
-        /// </summary>
-        public void ResetCombo()
-        {
-            if (currentCombo > 0)
-            {
-                Debug.Log($"Combo broken! Was at x{currentCombo}");
-                currentCombo = 0;
-                OnComboChanged?.Invoke(currentCombo);
-            }
-        }
-
-        /// <summary>
-        /// Restarts the game.
+        /// Full restart: clears the chain, resets the spawner, and re-initialises state.
         /// </summary>
         public void RestartGame()
         {
-            ballChainManager.ClearChain();
+            if (ballChainManager != null)
+                ballChainManager.ClearChain();
+            if (ballSpawner != null)
+                ballSpawner.StartLevel();
             InitializeGame();
-        }
-
-        /// <summary>
-        /// Sets the target score for winning.
-        /// </summary>
-        public void SetTargetScore(int score)
-        {
-            targetScore = score;
         }
     }
 }

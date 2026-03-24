@@ -176,7 +176,7 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// Handles collision with balls in the chain.
+        /// Handles collision with balls in the chain and with obstacles.
         /// </summary>
         private void OnTriggerEnter(Collider other)
         {
@@ -187,22 +187,25 @@ namespace YuumisProwl.Projectile
                 Ball hitBall = other.GetComponent<Ball>();
                 if (hitBall != null && ballChainManager != null)
                 {
-                    // Insert a new ball at the hit position
                     float insertProgress = hitBall.PathProgress;
                     ballChainManager.InsertBallAtProgress(projectileColor, insertProgress);
 
                     Debug.Log($"Projectile hit ball! Inserting {projectileColor} at progress {insertProgress:F2}");
 
-                    // Return this projectile to its spawner/pool
                     if (ownerSpawner != null)
-                    {
                         ownerSpawner.ReturnProjectile(this);
-                    }
                     else
-                    {
                         Deactivate();
-                    }
                 }
+            }
+            else if (other.GetComponent<Obstacle>() != null)
+            {
+                Debug.Log($"Projectile hit obstacle — discarded.");
+
+                if (ownerSpawner != null)
+                    ownerSpawner.ReturnProjectile(this);
+                else
+                    Deactivate();
             }
         }
 

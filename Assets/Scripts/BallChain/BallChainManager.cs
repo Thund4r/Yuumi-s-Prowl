@@ -454,6 +454,20 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Returns true if any ball in the chain is past the hole (i.e. visible on screen).
+        /// Used by GameManager to detect the "retreat into hole" win condition.
+        /// </summary>
+        public bool HasVisibleBalls()
+        {
+            foreach (var node in ballChain)
+            {
+                if (node.pathProgress >= holeProgress)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Clears all balls from the chain.
         /// </summary>
         public void ClearChain()

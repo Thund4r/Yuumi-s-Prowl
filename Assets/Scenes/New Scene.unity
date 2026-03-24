@@ -228,6 +228,54 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: -90, y: 0, z: 0}
+--- !u!1 &742150876
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 742150878}
+  - component: {fileID: 742150877}
+  m_Layer: 0
+  m_Name: LevelManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &742150877
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 742150876}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cee76f37f31731c40a12e78425414ab5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballChainManager: {fileID: 1842243456}
+  ballSpawner: {fileID: 1842243455}
+  gameManager: {fileID: 1842243459}
+  levels: []
+--- !u!4 &742150878
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 742150876}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.089020774, y: 2.8805878, z: 0.55197394}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &776678607
 GameObject:
   m_ObjectHideFlags: 0
@@ -1005,6 +1053,7 @@ GameObject:
   - component: {fileID: 1842243455}
   - component: {fileID: 1842243458}
   - component: {fileID: 1842243459}
+  - component: {fileID: 1842243460}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -1027,6 +1076,7 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   ballCount: 60
   colorCount: 2
+  totalBallsToSpawn: 50
   introDuration: 5
   introSpeedCurve:
     serializedVersion: 2
@@ -1069,15 +1119,8 @@ MonoBehaviour:
   ballSpeed: 0.5
   ballSpacing: 0.5
   gapCloseSpeed: 5
-  destructionDelay: 0.1
-  enableDestructionEffects: 1
-  baseRecoilDistance: 0.3
-  recoilScalePerMatch: 0.5
-  maxRecoilDistance: 8
-  recoilDuration: 0.15
   initialPoolSize: 50
   holeProgress: 0
-  ballSpawner: {fileID: 1842243455}
 --- !u!4 &1842243457
 Transform:
   m_ObjectHideFlags: 0
@@ -1107,6 +1150,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   projectilePrefab: {fileID: 3653862568495902166, guid: 57c939778425c21409d9afb4c5107851, type: 3}
   ballChainManager: {fileID: 1842243456}
+  matchProcessor: {fileID: 0}
   spawnPoint: {fileID: 776678608}
   ballSpawner: {fileID: 1842243455}
   spawnCooldown: 0.5
@@ -1127,9 +1171,29 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ballChainManager: {fileID: 1842243456}
-  targetScore: 1000
+  matchProcessor: {fileID: 0}
+  ballSpawner: {fileID: 0}
   basePointsPerBall: 10
   comboMultiplier: 1.5
+--- !u!114 &1842243460
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1842243454}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f14ed193ee90d5f4ca9a3be0127de457, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballChainManager: {fileID: 1842243456}
+  destructionDelay: 0.1
+  enableDestructionEffects: 1
+  baseRecoilDistance: 0.3
+  recoilScalePerMatch: 0.2
+  maxRecoilDistance: 2
+  recoilDuration: 0.15
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1138,5 +1202,6 @@ SceneRoots:
   - {fileID: 1361801872}
   - {fileID: 1810922221}
   - {fileID: 1842243457}
-  - {fileID: 371462451}
+  - {fileID: 742150878}
   - {fileID: 776678608}
+  - {fileID: 371462451}

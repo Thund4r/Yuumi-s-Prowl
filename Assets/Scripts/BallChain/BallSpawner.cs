@@ -14,17 +14,23 @@ namespace YuumisProwl.BallChain
         [SerializeField] private BallChainManager ballChainManager;
 
         [Header("Spawn Settings")]
+        [Tooltip("How many balls to show in the intro animation. Remaining balls trickle in as tail spawns.")]
         [SerializeField] private int ballCount = 30;
         [SerializeField] private int colorCount = 4;
+        [Tooltip("Total balls for this level. Overridden by LevelManager at runtime.")]
+        [SerializeField] private int totalBallsToSpawn = 50;
 
         [Header("Intro Animation")]
         [SerializeField] private float introDuration = 7f;
         [SerializeField] private AnimationCurve introSpeedCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
 
         private List<BallColor> recentColors = new List<BallColor>(2);
+        private int ballsSpawned = 0;
 
         // Expose the configured color count so other systems can read the canonical value
         public int ColorCount => colorCount;
+        public bool AllBallsSpawned => ballsSpawned >= totalBallsToSpawn;
+        public int BallsRemaining => Mathf.Max(0, totalBallsToSpawn - ballsSpawned);
 
         /// <summary>
         /// True while the intro animation is playing. 
@@ -46,6 +52,19 @@ namespace YuumisProwl.BallChain
                 return;
             }
 
+            StartLevel();
+        }
+
+        /// <summary>
+        /// Resets spawner state and starts the intro animation.
+        /// Called on first Start and by LevelManager on level transitions.
+        /// </summary>
+        public void StartLevel()
+        {
+            StopAllCoroutines();
+            ballsSpawned = 0;
+            recentColors.Clear();
+            IsPlayingIntro = false;
             StartCoroutine(SpawnAndAnimate());
         }
 
@@ -76,10 +95,12 @@ namespace YuumisProwl.BallChain
         /// </summary>
         private void SpawnAllBalls()
         {
-            for (int i = 0; i < ballCount; i++)
+            int introCount = Mathf.Min(ballCount, totalBallsToSpawn);
+            for (int i = 0; i < introCount; i++)
             {
                 BallColor color = BallColorUtils.GetRandomColor(colorCount, recentColors);
                 ballChainManager.SpawnBall(color);
+                ballsSpawned++;
             }
 
             // Stack all balls at progress 0
@@ -138,17 +159,24 @@ namespace YuumisProwl.BallChain
         private void Update()
         {
             if (IsPlayingIntro || ballChainManager == null) return;
+            if (ballsSpawned >= totalBallsToSpawn) return;
 
             if (ballChainManager.NeedsTailBall())
             {
                 BallColor color = BallColorUtils.GetRandomColor(colorCount, recentColors);
                 ballChainManager.SpawnBall(color);
+                ballsSpawned++;
             }
         }
 
         public void SetColorCount(int count)
         {
             colorCount = Mathf.Clamp(count, 1, 6);
+        }
+
+        public void SetTotalBalls(int total)
+        {
+            totalBallsToSpawn = Mathf.Max(1, total);
         }
     }
 }
