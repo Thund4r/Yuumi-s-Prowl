@@ -24,5 +24,11 @@ namespace YuumisProwl
         [Header("Difficulty")]
         [Tooltip("Speed at which the ball chain moves along the path.")]
         public float ballSpeed = 2f;
+
+        [Header("Scene Transition")]
+        [Tooltip("Exact name of the scene to load when this level is won. Leave empty for no transition (final level).")]
+        public string nextSceneName = "";
+        [Tooltip("Exact name of the scene to reload when this level is lost. Leave empty to reload the current scene.")]
+        public string retrySceneName = "";
     }
 }

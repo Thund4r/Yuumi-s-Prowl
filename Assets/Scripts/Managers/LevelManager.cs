@@ -1,11 +1,18 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
+using System.Collections;
 using YuumisProwl.BallChain;
 
 namespace YuumisProwl.Managers
 {
     /// <summary>
-    /// Loads levels and applies their settings to the relevant systems.
-    /// Settings are applied in Awake so BallSpawner.Start() picks them up correctly.
+    /// Manages level flow and scene transitions.
+    ///
+    /// On win:  balls stop → brief pause → transition scene plays (next level loads in background)
+    ///          → animation finishes → new level pops in.
+    /// On lose: balls stop → brief pause → retry scene reloads directly (no transition animation).
+    ///
+    /// Each playable scene is self-contained. Set the transition scene name once on this component.
     /// </summary>
     public class LevelManager : MonoBehaviour
     {
@@ -14,66 +21,118 @@ namespace YuumisProwl.Managers
         [SerializeField] private BallSpawner ballSpawner;
         [SerializeField] private GameManager gameManager;
 
-        [Header("Levels")]
-        [SerializeField] private LevelData[] levels;
+        [Header("Level Config")]
+        [SerializeField] private LevelData levelData;
 
-        private int currentLevelIndex = 0;
+        [Header("Transition")]
+        [Tooltip("Name of the transition scene that plays between levels. " +
+                 "Leave empty to skip the transition and load the next level directly.")]
+        [SerializeField] private string transitionSceneName = "Transition";
+        [Tooltip("Seconds between the level ending and the transition scene (or next level) loading.")]
+        [SerializeField] private float pauseBeforeTransition = 0.5f;
 
-        public LevelData CurrentLevel => (levels != null && currentLevelIndex < levels.Length) ? levels[currentLevelIndex] : null;
-        public int CurrentLevelIndex => currentLevelIndex;
-        public int LevelCount => levels != null ? levels.Length : 0;
+        /// <summary>
+        /// True from the moment a level ends until the next scene loads.
+        /// ProjectileSpawner reads this to block shooting.
+        /// </summary>
+        public bool IsTransitioning { get; private set; }
+
+        public LevelData CurrentLevel => levelData;
 
         private void Awake()
         {
-            if (levels != null && levels.Length > 0)
-                ApplyLevelSettings(levels[0]);
+            if (levelData != null)
+                ApplyLevelSettings(levelData);
         }
 
         private void Start()
         {
-            if (levels == null || levels.Length == 0)
-                Debug.LogWarning("LevelManager: No levels configured!");
-        }
+            if (levelData == null)
+                Debug.LogWarning("LevelManager: No LevelData assigned!");
 
-        /// <summary>
-        /// Loads a level by index. Clears the current chain and restarts the spawner.
-        /// Safe to call during gameplay for level transitions.
-        /// </summary>
-        public void LoadLevel(int index)
-        {
-            if (levels == null || index < 0 || index >= levels.Length)
+            if (gameManager == null)
             {
-                Debug.LogError($"LevelManager: Level index {index} is out of range.");
+                Debug.LogError("LevelManager: GameManager not assigned!");
                 return;
             }
 
-            currentLevelIndex = index;
-            LevelData data = levels[index];
+            gameManager.OnGameWon  += HandleLevelWon;
+            gameManager.OnGameLost += HandleLevelLost;
+        }
 
-            ApplyLevelSettings(data);
+        private void OnDestroy()
+        {
+            if (gameManager != null)
+            {
+                gameManager.OnGameWon  -= HandleLevelWon;
+                gameManager.OnGameLost -= HandleLevelLost;
+            }
+        }
+
+        // ── Win ─────────────────────────────────────────────────────────────────
+
+        private void HandleLevelWon()
+        {
+            StartCoroutine(WinRoutine());
+        }
+
+        private IEnumerator WinRoutine()
+        {
+            IsTransitioning = true;
 
             if (ballChainManager != null)
-                ballChainManager.ClearChain();
+                ballChainManager.SetMoving(false);
 
-            if (ballSpawner != null)
-                ballSpawner.StartLevel();
+            yield return new WaitForSeconds(pauseBeforeTransition);
 
-            if (gameManager != null)
-                gameManager.InitializeGame();
+            string nextLevel = levelData != null ? levelData.nextSceneName : "";
 
-            Debug.Log($"Loaded level {index + 1}: {data.levelName}");
-        }
+            if (string.IsNullOrEmpty(nextLevel))
+            {
+                // No next level configured — this is the final level.
+                Debug.Log("LevelManager: No next level set. This appears to be the final level.");
+                IsTransitioning = false;
+                yield break;
+            }
 
-        /// <summary>
-        /// Advances to the next level. Logs a warning if already on the last level.
-        /// </summary>
-        public void LoadNextLevel()
-        {
-            if (currentLevelIndex + 1 < LevelCount)
-                LoadLevel(currentLevelIndex + 1);
+            if (!string.IsNullOrEmpty(transitionSceneName))
+            {
+                // Store the destination so TransitionController can read it,
+                // then load the transition scene.
+                LevelTransitionData.NextSceneName = nextLevel;
+                SceneManager.LoadScene(transitionSceneName);
+            }
             else
-                Debug.Log("LevelManager: No more levels.");
+            {
+                // No transition scene — jump straight to the next level.
+                SceneManager.LoadScene(nextLevel);
+            }
         }
+
+        // ── Lose ────────────────────────────────────────────────────────────────
+
+        private void HandleLevelLost()
+        {
+            StartCoroutine(LoseRoutine());
+        }
+
+        private IEnumerator LoseRoutine()
+        {
+            IsTransitioning = true;
+
+            if (ballChainManager != null)
+                ballChainManager.SetMoving(false);
+
+            yield return new WaitForSeconds(pauseBeforeTransition);
+
+            string retryScene = (levelData != null && !string.IsNullOrEmpty(levelData.retrySceneName))
+                ? levelData.retrySceneName
+                : SceneManager.GetActiveScene().name;
+
+            SceneManager.LoadScene(retryScene);
+        }
+
+        // ── Helpers ─────────────────────────────────────────────────────────────
 
         private void ApplyLevelSettings(LevelData data)
         {

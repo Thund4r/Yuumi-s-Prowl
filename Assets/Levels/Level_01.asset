@@ -13,6 +13,6 @@ MonoBehaviour:
   m_Name: Level_01
   m_EditorClassIdentifier: 
   levelName: Level 1
-  totalBalls: 50
-  colorCount: 4
-  ballSpeed: 2
+  totalBalls: 90
+  colorCount: 2
+  ballSpeed: 1

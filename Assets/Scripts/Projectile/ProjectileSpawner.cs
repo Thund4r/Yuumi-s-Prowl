@@ -1,6 +1,7 @@
 using UnityEngine;
 using YuumisProwl;
 using YuumisProwl.BallChain;
+using YuumisProwl.Managers;
 using YuumisProwl.Utilities;
 
 namespace YuumisProwl.Projectile
@@ -17,6 +18,7 @@ namespace YuumisProwl.Projectile
         [SerializeField] private MatchProcessor matchProcessor;
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private BallSpawner ballSpawner;
+        [SerializeField] private LevelManager levelManager;
 
         [Header("Spawn Settings")]
         [SerializeField] private float spawnCooldown = 0.5f;
@@ -27,6 +29,9 @@ namespace YuumisProwl.Projectile
         [SerializeField] private bool randomColors = true;
         [SerializeField] private BallColor fixedColor = BallColor.Red;
         [SerializeField] private KeyCode shootKey = KeyCode.Mouse0;
+
+        // Fired each time a projectile is successfully launched. CannonController subscribes to this.
+        public System.Action OnShot;
 
         private ObjectPool<Projectile> projectilePool;
         private float lastSpawnTime;
@@ -95,6 +100,7 @@ namespace YuumisProwl.Projectile
         private void HandleInput()
         {
             if (ballSpawner != null && ballSpawner.IsPlayingIntro) return;
+            if (levelManager != null && levelManager.IsTransitioning) return;
 
             bool shouldShoot = false;
             Vector3 worldTarget = Vector3.zero;
@@ -157,6 +163,7 @@ namespace YuumisProwl.Projectile
             projectileInFlight = true;
             currentProjectile = null;
             lastSpawnTime = Time.time;
+            OnShot?.Invoke();
         }
 
         private void SpawnNextProjectile()
