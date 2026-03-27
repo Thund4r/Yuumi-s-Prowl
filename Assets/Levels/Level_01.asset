@@ -16,3 +16,5 @@ MonoBehaviour:
   totalBalls: 90
   colorCount: 2
   ballSpeed: 1
+  nextSceneName: Level 2
+  retrySceneName: 

@@ -84,18 +84,16 @@ namespace YuumisProwl.Managers
         }
 
         /// <summary>
-        /// Handles chain cleared event. Only wins if no more balls are queued —
-        /// otherwise the tail spawn will keep filling the chain.
+        /// Handles chain cleared event. All balls were destroyed via matches —
+        /// always a win regardless of how many were left to spawn, because
+        /// tail spawning stops when the chain is empty.
         /// </summary>
         private void HandleChainCleared()
         {
             if (gameOver) return;
 
-            if (ballSpawner == null || ballSpawner.AllBallsSpawned)
-            {
-                Debug.Log("Level Complete — all balls cleared!");
-                WinGame();
-            }
+            Debug.Log("Level Complete — all balls cleared!");
+            WinGame();
         }
 
         /// <summary>
