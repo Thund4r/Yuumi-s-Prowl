@@ -137,7 +137,10 @@ namespace YuumisProwl.Managers
         private void ApplyLevelSettings(LevelData data)
         {
             if (ballChainManager != null)
+            {
+                ballChainManager.InitializePool(data.totalBalls);
                 ballChainManager.SetSpeed(data.ballSpeed);
+            }
 
             if (ballSpawner != null)
             {

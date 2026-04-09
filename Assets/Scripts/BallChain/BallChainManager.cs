@@ -41,10 +41,7 @@ namespace YuumisProwl.BallChain
         public float BallSpacing => ballSpacing;
         public int BallCount => ballChain.Count;
 
-        private void Awake()
-        {
-            InitializePool();
-        }
+        private void Awake() { }
 
         private void Start()
         {
@@ -53,6 +50,9 @@ namespace YuumisProwl.BallChain
                 Debug.LogError("BallChainManager: PathController not assigned!");
                 enabled = false;
             }
+
+            if (ballPool == null)
+                InitializePool(initialPoolSize);
         }
 
         private void Update()
@@ -65,7 +65,7 @@ namespace YuumisProwl.BallChain
             }
         }
 
-        private void InitializePool()
+        public void InitializePool(int size)
         {
             if (ballPrefab == null)
             {
@@ -73,7 +73,7 @@ namespace YuumisProwl.BallChain
                 return;
             }
 
-            ballPool = new ObjectPool<Ball>(ballPrefab, initialPoolSize, transform);
+            ballPool = new ObjectPool<Ball>(ballPrefab, size, transform);
         }
 
         /// <summary>
