@@ -454,6 +454,55 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Inserts a Hammer power-up ball just behind the ball at insertAfterIndex.
+        /// The ball is visually golden and immune to color matching.
+        /// </summary>
+        public void SpawnHammerBall(int insertAfterIndex, float recoilDistance)
+        {
+            if (ballChain.Count == 0) return;
+            insertAfterIndex = Mathf.Clamp(insertAfterIndex, 0, ballChain.Count - 1);
+
+            Ball ball = ballPool.Get();
+            // Color is irrelevant visually (overridden by SetAsPowerUp) but must be valid
+            ball.Initialize(BallColor.Red);
+            ball.SetAsPowerUp(BallPowerUpType.Hammer, recoilDistance);
+            ball.OnGetFromPool();
+
+            float pathLength = pathController.GetPathLength();
+            float spacingProgress = ballSpacing / pathLength;
+
+            // Place it just behind the reference ball
+            float insertAt = ballChain[insertAfterIndex].pathProgress - spacingProgress;
+            int insertIndex = insertAfterIndex;
+
+            BallNode newNode = new BallNode(ball, insertAt, insertIndex);
+            ballChain.Insert(insertIndex, newNode);
+            PushBallsBackward(insertIndex + 1);
+            UpdateChainIndices();
+
+            Debug.Log($"Hammer ball spawned at chain index {insertIndex}.");
+        }
+
+        /// <summary>
+        /// Removes the ball at the given chain index and returns it to the pool.
+        /// Used when a power-up ball is consumed (e.g. hit by a projectile).
+        /// </summary>
+        public void RemoveBallAtIndex(int chainIndex)
+        {
+            if (chainIndex < 0 || chainIndex >= ballChain.Count) return;
+
+            BallNode node = ballChain[chainIndex];
+            if (node.ball != null)
+            {
+                ballPool.Return(node.ball);
+                node.ball.OnReturnToPool();
+            }
+
+            ballChain.RemoveAt(chainIndex);
+            UpdateChainIndices();
+        }
+
+        /// <summary>
         /// Returns true if any ball in the chain is past the hole (i.e. visible on screen).
         /// Used by GameManager to detect the "retreat into hole" win condition.
         /// </summary>

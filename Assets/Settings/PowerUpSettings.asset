@@ -9,12 +9,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 01e09cc3150b1964487c5ad74228da04, type: 3}
-  m_Name: Level_01
+  m_Script: {fileID: 11500000, guid: b599e2215507e1145a44730ee4fce80e, type: 3}
+  m_Name: PowerUpSettings
   m_EditorClassIdentifier: 
-  levelName: Level 1
-  totalBalls: 90
-  colorCount: 2
-  ballSpeed: 0.7
-  nextSceneName: Level 2
-  retrySceneName: 
+  hammerRecoilDistance: 3
+  naturalSpawnInterval: 20
+  naturalSpawnChance: 0.4
+  rewardCascadeThreshold: 1

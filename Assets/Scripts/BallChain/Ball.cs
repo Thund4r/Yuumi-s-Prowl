@@ -18,12 +18,24 @@ namespace YuumisProwl.BallChain
         [SerializeField] private MeshRenderer meshRenderer;
         [SerializeField] private SphereCollider sphereCollider;
 
+        [Header("Power-Up")]
+        [Tooltip("Optional child GameObject shown when this ball is a power-up (e.g. a hammer icon sprite).")]
+        [SerializeField] private GameObject powerUpIndicator;
+
         // Runtime properties
         private float pathProgress;
         private int chainIndex;
         private Material ballMaterial;
+        private BallPowerUpType powerUpType = BallPowerUpType.None;
+        private float powerUpValue = 0f;
 
         public BallColor BallColor => ballColor;
+        public BallPowerUpType PowerUpType => powerUpType;
+        /// <summary>
+        /// Generic numeric payload for the active power-up.
+        /// For Hammer: the recoil distance in world units.
+        /// </summary>
+        public float PowerUpValue => powerUpValue;
         public float PathProgress
         {
             get => pathProgress;
@@ -60,7 +72,21 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Updates the ball's visual appearance based on its color.
+        /// Marks this ball as a power-up of the given type, storing an optional numeric payload.
+        /// Call after Initialize() so the visual override takes effect.
+        /// </summary>
+        public void SetAsPowerUp(BallPowerUpType type, float value = 0f)
+        {
+            powerUpType = type;
+            powerUpValue = value;
+            if (powerUpIndicator != null)
+                powerUpIndicator.SetActive(type != BallPowerUpType.None);
+            UpdateVisuals();
+        }
+
+        /// <summary>
+        /// Updates the ball's visual appearance.
+        /// Power-up balls override the standard color with a fixed highlight color.
         /// </summary>
         private void UpdateVisuals()
         {
@@ -71,8 +97,15 @@ namespace YuumisProwl.BallChain
 
             if (ballMaterial == null) return;
 
-            // Set material color based on ball color
-            ballMaterial.color = BallColorUtils.ToUnityColor(ballColor);
+            if (powerUpType == BallPowerUpType.Hammer)
+            {
+                // Golden color so the hammer ball is immediately distinct
+                ballMaterial.color = new Color(1f, 0.85f, 0.1f);
+            }
+            else
+            {
+                ballMaterial.color = BallColorUtils.ToUnityColor(ballColor);
+            }
         }
 
         /// <summary>
@@ -82,6 +115,10 @@ namespace YuumisProwl.BallChain
         {
             pathProgress = 0f;
             chainIndex = -1;
+            powerUpType = BallPowerUpType.None;
+            powerUpValue = 0f;
+            if (powerUpIndicator != null)
+                powerUpIndicator.SetActive(false);
             transform.position = Vector3.zero;
             transform.rotation = Quaternion.identity;
         }

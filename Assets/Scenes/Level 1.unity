@@ -1363,6 +1363,7 @@ GameObject:
   - component: {fileID: 1842243458}
   - component: {fileID: 1842243459}
   - component: {fileID: 1842243460}
+  - component: {fileID: 1842243461}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -1502,6 +1503,22 @@ MonoBehaviour:
   recoilScalePerMatch: 0.2
   maxRecoilDistance: 2
   recoilDuration: 0.15
+--- !u!114 &1842243461
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1842243454}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 90982d80778d6c545a727cc6e0757a85, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballChainManager: {fileID: 1842243456}
+  matchProcessor: {fileID: 1842243460}
+  ballSpawner: {fileID: 1842243455}
+  settings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
 --- !u!1 &1892057636
 GameObject:
   m_ObjectHideFlags: 0

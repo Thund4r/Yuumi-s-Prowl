@@ -175,7 +175,7 @@ namespace YuumisProwl.Projectile
             projectile.transform.rotation = spawnPoint.rotation;
 
             BallColor color = randomColors ? nextColor : fixedColor;
-            projectile.Initialize(color, ballChainManager, this);
+            projectile.Initialize(color, ballChainManager, this, matchProcessor);
             projectile.OnGetFromPool();
 
             currentProjectile = projectile;
@@ -201,7 +201,7 @@ namespace YuumisProwl.Projectile
 
             // Initialize with color and chain manager reference
             BallColor color = randomColors ? nextColor : fixedColor;
-            projectile.Initialize(color, ballChainManager, this);
+            projectile.Initialize(color, ballChainManager, this, matchProcessor);
             projectile.OnGetFromPool();
 
             // Get next color for the following projectile

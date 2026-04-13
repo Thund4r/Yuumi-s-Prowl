@@ -28,6 +28,7 @@ namespace YuumisProwl.Projectile
         private bool isActive;
         private Camera mainCamera;
         private BallChainManager ballChainManager;
+        private MatchProcessor matchProcessor;
         private ProjectileSpawner ownerSpawner;
         private Material projectileMaterial;
         private bool isLaunched;
@@ -83,10 +84,11 @@ namespace YuumisProwl.Projectile
         /// <summary>
         /// Initializes the projectile with a color and chain manager reference.
         /// </summary>
-        public void Initialize(BallColor color, BallChainManager chainManager, ProjectileSpawner spawner = null)
+        public void Initialize(BallColor color, BallChainManager chainManager, ProjectileSpawner spawner = null, MatchProcessor processor = null)
         {
             projectileColor = color;
             ballChainManager = chainManager;
+            matchProcessor = processor;
             isActive = true;
             ownerSpawner = spawner;
 
@@ -187,15 +189,36 @@ namespace YuumisProwl.Projectile
                 Ball hitBall = other.GetComponent<Ball>();
                 if (hitBall != null && ballChainManager != null)
                 {
-                    float insertProgress = hitBall.PathProgress;
-                    ballChainManager.InsertBallAtProgress(projectileColor, insertProgress);
+                    if (hitBall.PowerUpType == BallPowerUpType.Hammer)
+                    {
+                        // Consume the hammer ball and push the chain back
+                        int hammerIndex = hitBall.ChainIndex;
+                        float recoilDistance = hitBall.PowerUpValue;
 
-                    Debug.Log($"Projectile hit ball! Inserting {projectileColor} at progress {insertProgress:F2}");
+                        ballChainManager.RemoveBallAtIndex(hammerIndex);
 
-                    if (ownerSpawner != null)
-                        ownerSpawner.ReturnProjectile(this);
+                        if (matchProcessor != null)
+                            matchProcessor.TriggerRecoil(recoilDistance);
+
+                        Debug.Log($"Hammer triggered! Recoil distance: {recoilDistance}");
+
+                        if (ownerSpawner != null)
+                            ownerSpawner.ReturnProjectile(this);
+                        else
+                            Deactivate();
+                    }
                     else
-                        Deactivate();
+                    {
+                        float insertProgress = hitBall.PathProgress;
+                        ballChainManager.InsertBallAtProgress(projectileColor, insertProgress);
+
+                        Debug.Log($"Projectile hit ball! Inserting {projectileColor} at progress {insertProgress:F2}");
+
+                        if (ownerSpawner != null)
+                            ownerSpawner.ReturnProjectile(this);
+                        else
+                            Deactivate();
+                    }
                 }
             }
             else if (other.GetComponent<Obstacle>() != null)

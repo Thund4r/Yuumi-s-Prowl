@@ -30,6 +30,12 @@ namespace YuumisProwl.BallChain
 
         public System.Action<int, BallColor> OnBallsDestroyed;
         public System.Action OnChainCleared;
+        /// <summary>
+        /// Fired once after an entire match sequence (initial match + cascades) finishes.
+        /// Parameters: cascadeCount (0 = no cascades), lastGapIndex (chain index where the
+        /// final match occurred, or -1 if the chain was cleared).
+        /// </summary>
+        public System.Action<int, int> OnMatchSequenceComplete;
 
         private void Start()
         {
@@ -76,6 +82,7 @@ namespace YuumisProwl.BallChain
         private IEnumerator ProcessMatches(List<BallNode> matchedBalls)
         {
             int matchCount = 0;
+            int lastGapIndex = -1;
 
             while (matchedBalls.Count > 0)
             {
@@ -86,12 +93,14 @@ namespace YuumisProwl.BallChain
 
                 ballChainManager.RemoveBalls(matchedBalls);
                 matchCount++;
+                lastGapIndex = gapIndex;
 
                 OnBallsDestroyed?.Invoke(destroyedCount, matchedColor);
                 Debug.Log($"Destroyed {destroyedCount} {matchedColor} balls!");
 
                 if (ballChainManager.GetBallChain().Count == 0)
                 {
+                    OnMatchSequenceComplete?.Invoke(matchCount - 1, -1);
                     OnChainCleared?.Invoke();
                     Debug.Log("All balls cleared! Level Complete!");
                     yield break;
@@ -116,6 +125,13 @@ namespace YuumisProwl.BallChain
                     break;
                 }
             }
+
+            int cascadeCount = matchCount - 1;
+            if (cascadeCount > 0)
+            {
+                Debug.Log($"Match sequence complete — {cascadeCount} cascade(s).");
+            }
+            OnMatchSequenceComplete?.Invoke(cascadeCount, lastGapIndex);
         }
 
         private float CalculateRecoilDistance(int matchNumber)
@@ -149,6 +165,15 @@ namespace YuumisProwl.BallChain
                 elapsed += Time.deltaTime;
                 yield return null;
             }
+        }
+
+        /// <summary>
+        /// Starts a chain recoil coroutine from any external caller (e.g. a power-up).
+        /// Use this instead of calling StartCoroutine(ApplyChainRecoil()) from outside this class.
+        /// </summary>
+        public void TriggerRecoil(float distance)
+        {
+            StartCoroutine(ApplyChainRecoil(distance));
         }
 
         /// <summary>

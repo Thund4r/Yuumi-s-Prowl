@@ -25,19 +25,27 @@ namespace YuumisProwl.BallChain
                 return new List<BallNode>();
             }
 
+            // Power-up balls are never part of a color match
+            if (chain[centerIndex].ball.PowerUpType != BallPowerUpType.None)
+                return new List<BallNode>();
+
             BallColor targetColor = chain[centerIndex].ball.BallColor;
             List<BallNode> matchedBalls = new List<BallNode>();
 
-            // Expand left from center
+            // Expand left from center — stop at power-up balls
             int leftIndex = centerIndex;
-            while (leftIndex > 0 && chain[leftIndex - 1].ball.BallColor == targetColor)
+            while (leftIndex > 0
+                && chain[leftIndex - 1].ball.BallColor == targetColor
+                && chain[leftIndex - 1].ball.PowerUpType == BallPowerUpType.None)
             {
                 leftIndex--;
             }
 
-            // Expand right from center
+            // Expand right from center — stop at power-up balls
             int rightIndex = centerIndex;
-            while (rightIndex < chain.Count - 1 && chain[rightIndex + 1].ball.BallColor == targetColor)
+            while (rightIndex < chain.Count - 1
+                && chain[rightIndex + 1].ball.BallColor == targetColor
+                && chain[rightIndex + 1].ball.PowerUpType == BallPowerUpType.None)
             {
                 rightIndex++;
             }
