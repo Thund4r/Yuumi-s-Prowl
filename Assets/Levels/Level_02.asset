@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   levelName: Level 2
   totalBalls: 90
-  colorCount: 4
+  colorCount: 3
   ballSpeed: 0.8
   nextSceneName: Level 3
   retrySceneName: 

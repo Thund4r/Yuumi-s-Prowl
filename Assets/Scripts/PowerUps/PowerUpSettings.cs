@@ -24,5 +24,21 @@ namespace YuumisProwl.PowerUps
         [Header("Reward Spawn")]
         [Tooltip("Minimum number of cascade matches in a single sequence to reward a Hammer spawn.")]
         public int rewardCascadeThreshold = 2;
+
+        [Header("Charge System")]
+        [Tooltip("Charge earned per ball destroyed in a match.")]
+        public int chargePerBallDestroyed = 1;
+        [Tooltip("Bonus charge per cascade in a match sequence.")]
+        public int cascadeBonusCharge = 3;
+        [Tooltip("Charge required to earn a random power-up.")]
+        public int chargeThreshold = 10;
+        [Tooltip("Maximum number of power-ups the player can hold at once.")]
+        public int maxPowerUpSlots = 3;
+
+        [Header("Pierce")]
+        [Tooltip("Maximum world-space distance a Pierce projectile travels before despawning.")]
+        public float pierceMaxDistance = 30f;
+        [Tooltip("Travel speed multiplier for Pierce projectiles (relative to normal homing speed).")]
+        public float pierceSpeedMultiplier = 2f;
     }
 }

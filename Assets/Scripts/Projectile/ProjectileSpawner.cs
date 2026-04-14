@@ -2,6 +2,7 @@ using UnityEngine;
 using YuumisProwl;
 using YuumisProwl.BallChain;
 using YuumisProwl.Managers;
+using YuumisProwl.PowerUps;
 using YuumisProwl.Utilities;
 
 namespace YuumisProwl.Projectile
@@ -19,6 +20,10 @@ namespace YuumisProwl.Projectile
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private BallSpawner ballSpawner;
         [SerializeField] private LevelManager levelManager;
+
+        [Header("Power-Ups")]
+        [SerializeField] private PowerUpInventory powerUpInventory;
+        [SerializeField] private PowerUpSettings powerUpSettings;
 
         [Header("Spawn Settings")]
         [SerializeField] private float spawnCooldown = 0.5f;
@@ -69,9 +74,32 @@ namespace YuumisProwl.Projectile
                 return;
             }
 
+            if (powerUpInventory != null)
+                powerUpInventory.OnPowerUpEquipped += HandlePowerUpEquipped;
+
             // Initialize next color
             nextColor = GetNextColor();
             SpawnNextProjectile();
+        }
+
+        private void HandlePowerUpEquipped(PowerUpType type)
+        {
+            // Update the currently-loaded projectile's visuals/behavior to match.
+            // If no projectile is currently loaded (one is in flight), the next spawn
+            // will pick up the equipped power-up from the inventory.
+            if (currentProjectile != null)
+                ApplyEquippedPowerUp(currentProjectile);
+        }
+
+        private void ApplyEquippedPowerUp(Projectile projectile)
+        {
+            if (projectile == null) return;
+            if (powerUpInventory == null) { projectile.SetPowerUp(PowerUpType.None); return; }
+
+            PowerUpType type = powerUpInventory.EquippedPowerUp;
+            float pierceDist = powerUpSettings != null ? powerUpSettings.pierceMaxDistance : 30f;
+            float speedMult = powerUpSettings != null ? powerUpSettings.pierceSpeedMultiplier : 2f;
+            projectile.SetPowerUp(type, pierceDist, speedMult);
         }
 
         private void Update()
@@ -163,6 +191,11 @@ namespace YuumisProwl.Projectile
             projectileInFlight = true;
             currentProjectile = null;
             lastSpawnTime = Time.time;
+
+            // If a power-up was equipped for this shot, consume it from the inventory.
+            if (powerUpInventory != null && powerUpInventory.EquippedPowerUp != PowerUpType.None)
+                powerUpInventory.ConsumeEquipped();
+
             OnShot?.Invoke();
         }
 
@@ -180,6 +213,10 @@ namespace YuumisProwl.Projectile
 
             currentProjectile = projectile;
             nextColor = GetNextColor();
+
+            // If a power-up is already equipped (e.g. equipped while a prior shot was
+            // in flight), apply it to this freshly-loaded projectile.
+            ApplyEquippedPowerUp(currentProjectile);
         }
 
         /// <summary>
@@ -262,6 +299,9 @@ namespace YuumisProwl.Projectile
 
         private void OnDestroy()
         {
+            if (powerUpInventory != null)
+                powerUpInventory.OnPowerUpEquipped -= HandlePowerUpEquipped;
+
             if (projectilePool != null)
             {
                 projectilePool.Clear();

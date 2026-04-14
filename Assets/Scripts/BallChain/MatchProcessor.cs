@@ -177,6 +177,76 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Called by the Pierce power-up after its projectile has finished traveling.
+        /// Balls hit by the projectile were already removed during flight; this routine
+        /// waits for the chain to settle, then detects and processes any matches/cascades
+        /// that formed from the gap closures.
+        /// </summary>
+        public void ProcessPierceAftermath(int destroyedCount)
+        {
+            StartCoroutine(PierceAftermathCoroutine(destroyedCount));
+        }
+
+        private IEnumerator PierceAftermathCoroutine(int destroyedCount)
+        {
+            if (isProcessingMatches) yield break;
+            isProcessingMatches = true;
+
+            // Report the pierce destruction itself (color is irrelevant for pierce).
+            if (destroyedCount > 0)
+                OnBallsDestroyed?.Invoke(destroyedCount, BallColor.Red);
+
+            if (ballChainManager.GetBallChain().Count == 0)
+            {
+                OnMatchSequenceComplete?.Invoke(0, -1);
+                OnChainCleared?.Invoke();
+                isProcessingMatches = false;
+                yield break;
+            }
+
+            // Wait for the chain's natural spacing logic to pull gaps closed.
+            yield return new WaitForSeconds(destructionDelay + 0.2f);
+
+            int cascadeCount = 0;
+            int lastGapIndex = -1;
+
+            var chain = ballChainManager.GetBallChain();
+            var allMatches = matchDetector.DetectAllMatches(chain);
+
+            while (allMatches.Count > 0)
+            {
+                var match = allMatches[0];
+                int gapIndex = matchDetector.GetGapIndexAfterRemoval(chain, match);
+                BallColor matchedColor = match[0].ball.BallColor;
+                int matchSize = match.Count;
+
+                ballChainManager.RemoveBalls(match);
+                cascadeCount++;
+                lastGapIndex = gapIndex;
+
+                OnBallsDestroyed?.Invoke(matchSize, matchedColor);
+                Debug.Log($"Pierce cascade: destroyed {matchSize} {matchedColor} balls.");
+
+                if (ballChainManager.GetBallChain().Count == 0)
+                {
+                    OnMatchSequenceComplete?.Invoke(cascadeCount, -1);
+                    OnChainCleared?.Invoke();
+                    isProcessingMatches = false;
+                    yield break;
+                }
+
+                yield return StartCoroutine(CloseGap(gapIndex));
+                yield return StartCoroutine(ApplyChainRecoil(CalculateRecoilDistance(cascadeCount)));
+
+                chain = ballChainManager.GetBallChain();
+                allMatches = matchDetector.DetectAllMatches(chain);
+            }
+
+            OnMatchSequenceComplete?.Invoke(cascadeCount, lastGapIndex);
+            isProcessingMatches = false;
+        }
+
+        /// <summary>
         /// Applies a recoil (push-back) to the entire chain by a given world-space distance.
         /// Can be called externally by power-ups or other game systems.
         /// </summary>
