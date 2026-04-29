@@ -117,7 +117,7 @@ namespace YuumisProwl.PowerUps.UI
         }
 
         private void HandleInventoryChanged(PowerUpType type) => RefreshSlots();
-        private void HandleInventoryConsumed() => RefreshSlots();
+        private void HandleInventoryConsumed() { RefreshSlots(); RefreshEquippedHighlight(); }
 
         private void HandleEquippedChanged(PowerUpType type)
         {

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace YuumisProwl.PowerUps
@@ -23,14 +22,19 @@ namespace YuumisProwl.PowerUps
         [Header("Settings")]
         [SerializeField] private PowerUpSettings settings;
 
-        private readonly List<PowerUpType> slots = new List<PowerUpType>();
+        private PowerUpType[] slots;
         private PowerUpType equippedPowerUp = PowerUpType.None;
         private int equippedSlotIndex = -1;
 
         public PowerUpType EquippedPowerUp => equippedPowerUp;
         public int EquippedSlotIndex => equippedSlotIndex;
-        public int SlotCount => slots.Count;
+        public int SlotCount => slots.Length;
         public int MaxSlots => settings != null ? settings.maxPowerUpSlots : 3;
+
+        private void Awake()
+        {
+            slots = new PowerUpType[MaxSlots];
+        }
 
         /// <summary>Fired when a new power-up is added to the inventory.</summary>
         public System.Action<PowerUpType> OnPowerUpEarned;
@@ -62,12 +66,20 @@ namespace YuumisProwl.PowerUps
         public bool AddPowerUp(PowerUpType type)
         {
             if (type == PowerUpType.None) return false;
-            if (slots.Count >= MaxSlots) return false;
 
-            slots.Add(type);
-            OnPowerUpEarned?.Invoke(type);
-            Debug.Log($"PowerUpInventory: {type} added (slot {slots.Count - 1}).");
-            return true;
+            // Find the first empty slot from the left
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (slots[i] == PowerUpType.None)
+                {
+                    slots[i] = type;
+                    OnPowerUpEarned?.Invoke(type);
+                    Debug.Log($"PowerUpInventory: {type} added (slot {i}).");
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -75,7 +87,8 @@ namespace YuumisProwl.PowerUps
         /// </summary>
         public void EquipSlot(int index)
         {
-            if (index < 0 || index >= slots.Count) return;
+            if (index < 0 || index >= slots.Length) return;
+            if (slots[index] == PowerUpType.None) return;
 
             // Toggle: pressing the same slot again unequips
             if (equippedSlotIndex == index)
@@ -112,8 +125,8 @@ namespace YuumisProwl.PowerUps
                 return PowerUpType.None;
 
             PowerUpType consumed = equippedPowerUp;
-            if (equippedSlotIndex < slots.Count)
-                slots.RemoveAt(equippedSlotIndex);
+            if (equippedSlotIndex < slots.Length)
+                slots[equippedSlotIndex] = PowerUpType.None;
 
             equippedPowerUp = PowerUpType.None;
             equippedSlotIndex = -1;
@@ -128,7 +141,7 @@ namespace YuumisProwl.PowerUps
         /// </summary>
         public PowerUpType GetSlot(int index)
         {
-            if (index < 0 || index >= slots.Count) return PowerUpType.None;
+            if (index < 0 || index >= slots.Length) return PowerUpType.None;
             return slots[index];
         }
     }

@@ -225,11 +225,13 @@ namespace YuumisProwl.Projectile
                 Ball hitBall = other.GetComponent<Ball>();
                 if (hitBall != null && ballChainManager != null)
                 {
-                    if (hitBall.PowerUpType == BallPowerUpType.Hammer)
+                    // Check if the hit ball or either neighbor is a hammer
+                    Ball hammer = FindAdjacentHammer(hitBall);
+
+                    if (hammer != null)
                     {
-                        // Consume the hammer ball and push the chain back
-                        int hammerIndex = hitBall.ChainIndex;
-                        float recoilDistance = hitBall.PowerUpValue;
+                        int hammerIndex = hammer.ChainIndex;
+                        float recoilDistance = hammer.PowerUpValue;
 
                         ballChainManager.RemoveBallAtIndex(hammerIndex);
 
@@ -266,6 +268,29 @@ namespace YuumisProwl.Projectile
                 else
                     Deactivate();
             }
+        }
+
+        /// <summary>
+        /// Returns a hammer ball if the hit ball itself is a hammer, or if either
+        /// direct neighbor in the chain is a hammer. Returns null if no hammer is nearby.
+        /// </summary>
+        private Ball FindAdjacentHammer(Ball hitBall)
+        {
+            if (hitBall.PowerUpType == BallPowerUpType.Hammer)
+                return hitBall;
+
+            var chain = ballChainManager.GetBallChain();
+            int index = hitBall.ChainIndex;
+
+            // Check neighbor ahead (lower index = further along path)
+            if (index - 1 >= 0 && chain[index - 1].ball.PowerUpType == BallPowerUpType.Hammer)
+                return chain[index - 1].ball;
+
+            // Check neighbor behind
+            if (index + 1 < chain.Count && chain[index + 1].ball.PowerUpType == BallPowerUpType.Hammer)
+                return chain[index + 1].ball;
+
+            return null;
         }
 
         /// <summary>
