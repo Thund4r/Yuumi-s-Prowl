@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using YuumisProwl;
 using YuumisProwl.BallChain;
 using YuumisProwl.Managers;
@@ -130,6 +131,10 @@ namespace YuumisProwl.Projectile
             if (ballSpawner != null && ballSpawner.IsPlayingIntro) return;
             if (levelManager != null && levelManager.IsTransitioning) return;
 
+            // Don't shoot when clicking on UI elements
+            if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                return;
+
             bool shouldShoot = false;
             Vector3 worldTarget = Vector3.zero;
             Camera cam = Camera.main;
@@ -146,6 +151,9 @@ namespace YuumisProwl.Projectile
             if (Input.touchCount > 0)
             {
                 Touch touch = Input.GetTouch(0);
+                // Don't shoot when tapping on UI elements
+                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.fingerId))
+                    return;
                 shouldShoot = touch.phase == TouchPhase.Began;
                 if (shouldShoot && cam != null)
                 {
@@ -187,14 +195,25 @@ namespace YuumisProwl.Projectile
             // Prevent firing if a projectile is already in flight
             if (projectileInFlight) return;
 
-            currentProjectile.Launch(targetWorldPos);
-            projectileInFlight = true;
-            currentProjectile = null;
+            Projectile launched = currentProjectile;
             lastSpawnTime = Time.time;
 
-            // If a power-up was equipped for this shot, consume it from the inventory.
+            // Consume equipped power-up before launch so that if the projectile
+            // completes instantly (e.g. Pierce), the next spawned projectile
+            // won't inherit the consumed power-up.
             if (powerUpInventory != null && powerUpInventory.EquippedPowerUp != PowerUpType.None)
                 powerUpInventory.ConsumeEquipped();
+
+            launched.Launch(targetWorldPos);
+
+            // If the projectile completed instantly (e.g. Pierce), ReturnProjectile
+            // was already called during Launch, which reset projectileInFlight and
+            // spawned the next projectile. Don't override that state.
+            if (currentProjectile == launched)
+            {
+                projectileInFlight = true;
+                currentProjectile = null;
+            }
 
             OnShot?.Invoke();
         }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using YuumisProwl;
 using YuumisProwl.BallChain;
@@ -11,8 +12,8 @@ namespace YuumisProwl.Projectile
     ///
     /// When an equipped power-up (PowerUpType) is set via SetPowerUp before launch,
     /// the projectile's behavior changes. Current special behaviors:
-    ///   Pierce — travels in a straight line, destroys every ball it touches,
-    ///            ignores obstacles, despawns after a max distance.
+    ///   Pierce — on launch, instantly raycasts along the firing direction and
+    ///            destroys all balls in the line. Cascades process immediately.
     /// </summary>
     [RequireComponent(typeof(MeshRenderer))]
     [RequireComponent(typeof(SphereCollider))]
@@ -84,27 +85,15 @@ namespace YuumisProwl.Projectile
             }
 
             isLaunched = true;
+
+            if (equippedPowerUp == PowerUpType.Pierce)
+                ExecutePierceInstant();
         }
 
         private void Update()
         {
             if (!isActive) return;
             if (!isLaunched) return;
-
-            if (equippedPowerUp == PowerUpType.Pierce)
-            {
-                // Pierce: travel in a straight line, skip homing. Track distance for auto-despawn.
-                float moveStep = homingSpeed * pierceSpeedMultiplier * Time.deltaTime;
-                float angle = transform.eulerAngles.z * Mathf.Deg2Rad;
-                Vector3 forward = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-                transform.position += forward * moveStep;
-                distanceTraveled += moveStep;
-
-                if (distanceTraveled >= pierceMaxDistance)
-                    FinishPierce();
-
-                return;
-            }
 
             UpdateTarget();
             MoveTowardsTarget();
@@ -231,21 +220,6 @@ namespace YuumisProwl.Projectile
         {
             if (!isActive) return;
 
-            // Pierce: destroy every ball it passes through, ignore obstacles, keep flying.
-            if (equippedPowerUp == PowerUpType.Pierce)
-            {
-                if (other.CompareTag("Ball"))
-                {
-                    Ball hitBall = other.GetComponent<Ball>();
-                    if (hitBall != null && ballChainManager != null)
-                    {
-                        ballChainManager.RemoveBallAtIndex(hitBall.ChainIndex);
-                        pierceDestroyCount++;
-                    }
-                }
-                return;
-            }
-
             if (other.CompareTag("Ball"))
             {
                 Ball hitBall = other.GetComponent<Ball>();
@@ -295,11 +269,41 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// Called when the Pierce projectile finishes its flight (max distance reached).
-        /// Hands off to MatchProcessor to handle cascade detection, then returns to the pool.
+        /// Executes Pierce instantly on launch: raycasts along the firing direction,
+        /// removes all balls in the line, then hands off to MatchProcessor for cascades.
         /// </summary>
-        private void FinishPierce()
+        private void ExecutePierceInstant()
         {
+            float angle = transform.eulerAngles.z * Mathf.Deg2Rad;
+            Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
+            float castRadius = sphereCollider != null ? sphereCollider.radius : 0.3f;
+
+            RaycastHit[] hits = Physics.SphereCastAll(
+                transform.position, castRadius, direction, pierceMaxDistance);
+
+            // Collect chain indices of hit balls
+            List<int> indicesToRemove = new List<int>();
+            foreach (var hit in hits)
+            {
+                if (hit.collider.CompareTag("Ball"))
+                {
+                    Ball ball = hit.collider.GetComponent<Ball>();
+                    if (ball != null && !indicesToRemove.Contains(ball.ChainIndex))
+                        indicesToRemove.Add(ball.ChainIndex);
+                }
+            }
+
+            // Remove highest indices first so earlier indices stay valid
+            indicesToRemove.Sort((a, b) => b.CompareTo(a));
+
+            foreach (int index in indicesToRemove)
+            {
+                if (ballChainManager != null)
+                    ballChainManager.RemoveBallAtIndex(index);
+            }
+
+            pierceDestroyCount = indicesToRemove.Count;
+
             if (matchProcessor != null)
                 matchProcessor.ProcessPierceAftermath(pierceDestroyCount);
 

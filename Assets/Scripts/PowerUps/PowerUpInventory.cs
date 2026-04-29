@@ -28,6 +28,7 @@ namespace YuumisProwl.PowerUps
         private int equippedSlotIndex = -1;
 
         public PowerUpType EquippedPowerUp => equippedPowerUp;
+        public int EquippedSlotIndex => equippedSlotIndex;
         public int SlotCount => slots.Count;
         public int MaxSlots => settings != null ? settings.maxPowerUpSlots : 3;
 
@@ -75,6 +76,13 @@ namespace YuumisProwl.PowerUps
         public void EquipSlot(int index)
         {
             if (index < 0 || index >= slots.Count) return;
+
+            // Toggle: pressing the same slot again unequips
+            if (equippedSlotIndex == index)
+            {
+                UnequipPowerUp();
+                return;
+            }
 
             equippedSlotIndex = index;
             equippedPowerUp = slots[index];
