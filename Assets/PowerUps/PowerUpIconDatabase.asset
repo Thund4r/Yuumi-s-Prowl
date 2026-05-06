@@ -14,5 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   entries:
   - type: 1
-    icon: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
-    tint: {r: 0, g: 0, b: 0, a: 0}
+    icon: {fileID: 21300000, guid: 01bf3709f823f164c86d949de5350db1, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 1}
+  - type: 2
+    icon: {fileID: 21300000, guid: 5c7fed49f19496446a59f7c0c2f6f12d, type: 3}
+    tint: {r: 1, g: 1, b: 1, a: 1}

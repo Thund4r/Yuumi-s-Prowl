@@ -16,3 +16,10 @@ MonoBehaviour:
   naturalSpawnInterval: 20
   naturalSpawnChance: 0.4
   rewardCascadeThreshold: 1
+  chargePerBallDestroyed: 1
+  cascadeBonusCharge: 3
+  chargeThreshold: 30
+  maxPowerUpSlots: 3
+  pierceMaxDistance: 30
+  pierceSpeedMultiplier: 2
+  bombRadius: 2

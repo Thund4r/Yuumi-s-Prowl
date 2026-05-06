@@ -100,7 +100,8 @@ namespace YuumisProwl.Projectile
             PowerUpType type = powerUpInventory.EquippedPowerUp;
             float pierceDist = powerUpSettings != null ? powerUpSettings.pierceMaxDistance : 30f;
             float speedMult = powerUpSettings != null ? powerUpSettings.pierceSpeedMultiplier : 2f;
-            projectile.SetPowerUp(type, pierceDist, speedMult);
+            float bombRad = powerUpSettings != null ? powerUpSettings.bombRadius : 3f;
+            projectile.SetPowerUp(type, pierceDist, speedMult, bombRad);
         }
 
         private void Update()
@@ -189,8 +190,9 @@ namespace YuumisProwl.Projectile
             if (currentProjectile == null) return;
             if (Time.time - lastSpawnTime < spawnCooldown) return;
 
-            // Prevent shooting while the chain is processing matches (including recoil)
-            if (matchProcessor != null && matchProcessor.IsProcessingMatches) return;
+            // Note: shooting during match processing / gap closing is allowed. The match
+            // processor supports concurrent sequences, so a projectile-induced match in any
+            // segment will be processed even while another sequence is still in progress.
 
             // Prevent firing if a projectile is already in flight
             if (projectileInFlight) return;

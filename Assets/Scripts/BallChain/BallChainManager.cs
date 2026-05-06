@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections;
 using System.Collections.Generic;
 using YuumisProwl;
 using YuumisProwl.Utilities;
@@ -7,8 +6,14 @@ using YuumisProwl.Utilities;
 namespace YuumisProwl.BallChain
 {
     /// <summary>
-    /// Manages the chain of balls moving along the path.
-    /// Handles ball movement, insertion, removal, and spacing.
+    /// Manages the ball chain along the path. Internally the chain is one or more
+    /// ChainSegments — contiguous runs of balls. Gaps between segments (e.g. from a
+    /// Bomb explosion) persist; each segment moves, recoils, and matches independently.
+    /// Adjacent segments merge automatically when they touch.
+    ///
+    /// Public API exposes both a flat-chain view (GetBallChain, BallCount, ChainIndex)
+    /// for legacy callers, and a segment view (GetSegments, GetSegmentForBall) for
+    /// segment-aware logic.
     /// </summary>
     public class BallChainManager : MonoBehaviour
     {
@@ -21,25 +26,42 @@ namespace YuumisProwl.BallChain
         [SerializeField] private float ballSpacing = 0.5f;
 
         [Header("Gap Close Settings")]
-        [SerializeField] private float gapCloseSpeed = 5f;
+        [Tooltip("Speed at which a trailing segment catches up to the segment ahead.")]
+        [SerializeField] private float gapCloseSpeed = 2f;
 
         [Header("Pool Settings")]
         [SerializeField] private int initialPoolSize = 50;
 
         [Header("Spawn Hole Settings")]
-        [SerializeField] private float holeProgress = 0f; // Progress at which balls disappear/appear
+        [SerializeField] private float holeProgress = 0f;
 
         // Events
         public System.Action OnBallReachedEnd;
         public System.Action<int> OnBallInserted;
+        /// <summary>
+        /// Fired when two segments merge. Parameters:
+        ///   mergedSegmentId — the ID of the surviving (ahead) segment that absorbed the other.
+        ///   boundaryLocalIndex — the local index in the merged segment where the absorbed
+        ///   segment's lead ball landed. Useful for detecting cascade matches at the seam.
+        /// </summary>
+        public System.Action<int, int> OnSegmentsMerged;
 
-        private List<BallNode> ballChain = new List<BallNode>();
+        private List<ChainSegment> segments = new List<ChainSegment>();
         private ObjectPool<Ball> ballPool;
         private bool isMoving = true;
+        private int nextSegmentId = 0;
 
         public float BallSpeed => ballSpeed;
         public float BallSpacing => ballSpacing;
-        public int BallCount => ballChain.Count;
+        public int BallCount
+        {
+            get
+            {
+                int total = 0;
+                for (int i = 0; i < segments.Count; i++) total += segments[i].Count;
+                return total;
+            }
+        }
 
         private void Awake() { }
 
@@ -60,6 +82,7 @@ namespace YuumisProwl.BallChain
             if (isMoving)
             {
                 MoveChain(Time.deltaTime);
+                MergeTouchingSegments();
                 UpdateBallVisibility();
                 UpdateBallPositions();
             }
@@ -76,49 +99,57 @@ namespace YuumisProwl.BallChain
             ballPool = new ObjectPool<Ball>(ballPrefab, size, transform);
         }
 
+        // --------------------------------------------------------------
+        // Movement
+        // --------------------------------------------------------------
+
         /// <summary>
-        /// Moves the entire chain forward along the path.
+        /// Movement is lead-driven from the front of the chain.
+        /// - Single segment: the lead (ball at index 0 of the only segment) moves forward
+        ///   at ballSpeed and all other balls follow at fixed spacing behind it.
+        /// - Multiple segments: only the front segment moves, and it moves *backward*
+        ///   at gapCloseSpeed. Every other segment is stationary. The chain only resumes
+        ///   forward motion once the front segment has absorbed everything behind it
+        ///   (i.e., the chain is one segment again).
         /// </summary>
         private void MoveChain(float deltaTime)
         {
-            if (pathController == null || ballChain.Count == 0) return;
+            if (pathController == null || segments.Count == 0) return;
 
             float pathLength = pathController.GetPathLength();
-            if (pathLength <= 0) return;
+            if (pathLength <= 0f) return;
 
-            float moveDistance = ballSpeed * deltaTime;
-            float progressIncrease = moveDistance / pathLength;
             float spacingProgress = ballSpacing / pathLength;
 
-            // Move the tail ball (last index, furthest back on path)
-            int tailIndex = ballChain.Count - 1;
-            ballChain[tailIndex].pathProgress += progressIncrease;
+            ChainSegment front = segments[0];
+            if (front.IsEmpty) return;
 
-            // Every ball ahead follows spacing from the one behind it
-            for (int i = tailIndex - 1; i >= 0; i--)
+            BallNode lead = front.balls[0];
+
+            if (segments.Count == 1)
             {
-                float targetProgress = ballChain[i + 1].pathProgress + spacingProgress;
-
-                // If there's a gap (ball is too far ahead), pull it back
-                if (ballChain[i].pathProgress > targetProgress)
-                {
-                    ballChain[i].pathProgress = Mathf.MoveTowards(
-                        ballChain[i].pathProgress,
-                        targetProgress,
-                        gapCloseSpeed * deltaTime / pathLength
-                    );
-                }
-                else
-                {
-                    // Ball is where it should be or too close — snap to correct spacing
-                    ballChain[i].pathProgress = targetProgress;
-                }
+                // Forward motion: lead drives, everything follows at spacing.
+                float forwardStep = ballSpeed * deltaTime / pathLength;
+                lead.pathProgress += forwardStep;
+            }
+            else
+            {
+                // Multi-segment: only the front moves, and it moves backward.
+                float gapCloseStep = gapCloseSpeed * deltaTime / pathLength;
+                lead.pathProgress -= gapCloseStep;
             }
 
-            // Check if lead ball reached the end
-            if (ballChain[0].pathProgress >= 1f)
+            // Propagate spacing through the front segment from lead to tail.
+            for (int i = 1; i < front.Count; i++)
             {
-                ballChain[0].pathProgress = 1f;
+                front.balls[i].pathProgress = front.balls[i - 1].pathProgress - spacingProgress;
+            }
+
+            // Lose condition: the lead reached the end. Only checked when the chain is
+            // one segment (in multi-segment mode the lead is moving backward, never forward).
+            if (segments.Count == 1 && lead.pathProgress >= 1f)
+            {
+                lead.pathProgress = 1f;
                 isMoving = false;
                 OnBallReachedEnd?.Invoke();
                 Debug.LogWarning("Ball reached the end! Game Over!");
@@ -126,14 +157,67 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Updates the visual positions of all balls based on their path progress.
+        /// After movement, merges any segment whose lead has caught up to the segment ahead.
+        /// Each merge fires OnSegmentsMerged with the boundary index. The handler may
+        /// modify the segments list (e.g., cascade match removes balls and re-splits), so
+        /// we restart the scan after every merge to keep iteration safe.
         /// </summary>
+        private void MergeTouchingSegments()
+        {
+            if (segments.Count < 2) return;
+
+            float pathLength = pathController.GetPathLength();
+            if (pathLength <= 0f) return;
+
+            float spacingProgress = ballSpacing / pathLength;
+            float mergeTolerance = spacingProgress * 1.05f; // small slop so floating-point ties merge
+
+            bool merged = true;
+            while (merged)
+            {
+                merged = false;
+                for (int s = 1; s < segments.Count; s++)
+                {
+                    ChainSegment ahead = segments[s - 1];
+                    ChainSegment behind = segments[s];
+
+                    if (!ahead.IsEmpty && !behind.IsEmpty
+                        && (ahead.Tail.pathProgress - behind.Lead.pathProgress) <= mergeTolerance)
+                    {
+                        int boundaryLocal = ahead.balls.Count; // index where behind's lead lands
+                        int aheadId = ahead.id;
+
+                        // Merge: append behind's balls to ahead, drop behind segment
+                        for (int i = 0; i < behind.balls.Count; i++)
+                        {
+                            behind.balls[i].segmentId = ahead.id;
+                            ahead.balls.Add(behind.balls[i]);
+                        }
+                        behind.balls.Clear();
+                        segments.RemoveAt(s);
+                        UpdateChainIndices();
+
+                        // Notify subscribers — handler may modify the segments list
+                        // (e.g., cascade match removes balls), so we restart the scan.
+                        OnSegmentsMerged?.Invoke(aheadId, boundaryLocal);
+
+                        merged = true;
+                        break;
+                    }
+                }
+            }
+        }
+
         private void UpdateBallPositions()
         {
-            foreach (var node in ballChain)
+            for (int s = 0; s < segments.Count; s++)
             {
-                if (node.ball != null && node.ball.gameObject.activeSelf)
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
                 {
+                    var node = segment.balls[i];
+                    if (node.ball == null || !node.ball.gameObject.activeSelf) continue;
+
                     node.ball.transform.position = pathController.GetPointOnPath(Mathf.Max(node.pathProgress, holeProgress));
                     node.ball.PathProgress = node.pathProgress;
 
@@ -147,8 +231,13 @@ namespace YuumisProwl.BallChain
             }
         }
 
+        // --------------------------------------------------------------
+        // Spawning (tail spawn from hole)
+        // --------------------------------------------------------------
+
         /// <summary>
-        /// Spawns a new ball at the start of the path.
+        /// Spawns a new ball at the hole, appending it to the back-most segment
+        /// (or creating a new segment if the chain is empty).
         /// </summary>
         public void SpawnBall(BallColor color)
         {
@@ -156,60 +245,35 @@ namespace YuumisProwl.BallChain
             ball.Initialize(color);
             ball.OnGetFromPool();
 
-            // Calculate spawn position
-            float spawnProgress = CalculateSpawnProgress();
-
-            BallNode newNode = new BallNode(ball, spawnProgress, ballChain.Count);
-            ballChain.Add(newNode);
-
-            ball.ChainIndex = newNode.chainIndex;
-            UpdateChainIndices();
-        }
-
-        /// <summary>
-        /// Calculates the spawn progress for a new ball at the end of the chain.
-        /// </summary>
-        private float CalculateSpawnProgress()
-        {
-            if (ballChain.Count == 0)
+            ChainSegment backSegment = GetBackSegment();
+            if (backSegment == null)
             {
-                return 0f;
+                backSegment = new ChainSegment(nextSegmentId++);
+                segments.Add(backSegment);
             }
 
-            // Spawn behind the last ball
-            BallNode lastBall = ballChain[ballChain.Count - 1];
-            float pathLength = pathController.GetPathLength();
-            float spacingProgress = ballSpacing / pathLength;
+            float spawnProgress = CalculateSpawnProgress(backSegment);
 
-            return lastBall.pathProgress - spacingProgress;
-        }
+            BallNode newNode = new BallNode(ball, spawnProgress, 0);
+            newNode.segmentId = backSegment.id;
+            backSegment.balls.Add(newNode);
 
-        /// <summary>
-        /// Inserts a ball into the chain at a specific progress point.
-        /// Used when projectiles hit the chain.
-        /// </summary>
-        public void InsertBall(Ball newBall, float insertProgress)
-        {
-            // Find insertion index
-            int insertIndex = FindNearestBallIndex(insertProgress);
-
-            // Create new node
-            BallNode newNode = new BallNode(newBall, insertProgress, insertIndex);
-
-            // Insert into chain
-            ballChain.Insert(insertIndex, newNode);
-
-            // Push subsequent balls backward to maintain spacing
-            PushBallsBackward(insertIndex + 1);
-
-            // Update all chain indices
             UpdateChainIndices();
         }
 
-        /// <summary>
-        /// Spawns a ball from the pool and inserts it at a specific progress point.
-        /// Used by projectiles when they hit the chain.
-        /// </summary>
+        private float CalculateSpawnProgress(ChainSegment backSegment)
+        {
+            if (backSegment.IsEmpty) return 0f;
+
+            float pathLength = pathController.GetPathLength();
+            float spacingProgress = ballSpacing / pathLength;
+            return backSegment.Tail.pathProgress - spacingProgress;
+        }
+
+        // --------------------------------------------------------------
+        // Insertion (projectile hits)
+        // --------------------------------------------------------------
+
         public void InsertBallAtProgress(BallColor color, float insertProgress)
         {
             Ball ball = ballPool.Get();
@@ -219,317 +283,448 @@ namespace YuumisProwl.BallChain
             float pathLength = pathController.GetPathLength();
             float spacingProgress = ballSpacing / pathLength;
 
-            // Find the hit ball index
-            int hitIndex = FindNearestBallIndex(insertProgress);
+            // Find segment + local index of the nearest ball
+            ChainSegment hitSegment;
+            int localHitIndex = FindNearestBallInSegments(insertProgress, out hitSegment);
 
-            int insertIndex;
+            if (hitSegment == null)
+            {
+                // No balls anywhere — create a new segment with just this ball
+                ChainSegment seg = new ChainSegment(nextSegmentId++);
+                BallNode node = new BallNode(ball, insertProgress, 0);
+                node.segmentId = seg.id;
+                seg.balls.Add(node);
+                segments.Add(seg);
+                SortSegmentsByProgress();
+                UpdateChainIndices();
+
+                int globalIdx = GlobalIndexOf(node);
+                Debug.Log($"Inserted ball into new segment - Color: {color}");
+                OnBallInserted?.Invoke(globalIdx);
+                return;
+            }
+
+            float hitProgress = hitSegment.balls[localHitIndex].pathProgress;
+            int insertLocal;
             float insertAt;
 
-            if (hitIndex < 0)
+            if (insertProgress >= hitProgress)
             {
-                // No balls in chain, just insert at progress
-                insertIndex = 0;
-                insertAt = insertProgress;
+                insertLocal = localHitIndex; // ahead of the hit ball
+                insertAt = hitProgress + spacingProgress;
             }
             else
             {
-                float hitProgress = ballChain[hitIndex].pathProgress;
-
-                // Determine which side the projectile hit from
-                // If projectile progress > hit ball progress, insert ahead (before in list, higher progress)
-                // If projectile progress < hit ball progress, insert behind (after in list, lower progress)
-                if (insertProgress >= hitProgress)
-                {
-                    // Insert ahead of the hit ball
-                    insertIndex = hitIndex;
-                    insertAt = hitProgress + spacingProgress;
-                }
-                else
-                {
-                    // Insert behind the hit ball
-                    insertIndex = hitIndex + 1;
-                    insertAt = hitProgress - spacingProgress;
-                }
+                insertLocal = localHitIndex + 1; // behind the hit ball
+                insertAt = hitProgress - spacingProgress;
             }
 
-            BallNode newNode = new BallNode(ball, insertAt, insertIndex);
-            ballChain.Insert(insertIndex, newNode);
+            BallNode newNode = new BallNode(ball, insertAt, 0);
+            newNode.segmentId = hitSegment.id;
+            hitSegment.balls.Insert(insertLocal, newNode);
 
-            // Push balls ahead (lower index = further along path) forward
-            PushBallsForward(insertIndex - 1, spacingProgress);
-
-            // Push balls behind (higher index = earlier on path) backward
-            PushBallsBackward(insertIndex + 1);
+            // Re-space within this segment
+            PushSegmentBallsForward(hitSegment, insertLocal - 1, spacingProgress);
+            PushSegmentBallsBackward(hitSegment, insertLocal + 1, spacingProgress);
 
             UpdateChainIndices();
 
-            Debug.Log($"Inserted ball at index {insertIndex} - Color: {color}");
-
-            OnBallInserted?.Invoke(insertIndex);
+            int globalInsertedIdx = GlobalIndexOf(newNode);
+            Debug.Log($"Inserted ball at segment {hitSegment.id} local {insertLocal} - Color: {color}");
+            OnBallInserted?.Invoke(globalInsertedIdx);
         }
 
-        /// <summary>
-        /// Finds the index of the ball nearest to the given progress.
-        /// </summary>
-        private int FindNearestBallIndex(float progress)
+        private void PushSegmentBallsForward(ChainSegment seg, int startLocal, float spacingProgress)
         {
-            if (ballChain.Count == 0) return -1;
+            if (startLocal < 0) return;
 
-            int nearestIndex = 0;
-            float nearestDistance = Mathf.Abs(ballChain[0].pathProgress - progress);
-
-            for (int i = 1; i < ballChain.Count; i++)
+            for (int i = startLocal; i >= 0; i--)
             {
-                float distance = Mathf.Abs(ballChain[i].pathProgress - progress);
-                if (distance < nearestDistance)
-                {
-                    nearestDistance = distance;
-                    nearestIndex = i;
-                }
-            }
-
-            return nearestIndex;
-        }
-
-        /// <summary>
-        /// Pushes balls forward (toward end of path) from the given index.
-        /// </summary>
-        private void PushBallsForward(int startIndex, float spacingProgress)
-        {
-            if (startIndex < 0) return;
-
-            for (int i = startIndex; i >= 0; i--)
-            {
-                float requiredProgress = ballChain[i + 1].pathProgress + spacingProgress;
-
-                if (ballChain[i].pathProgress < requiredProgress)
-                {
-                    ballChain[i].pathProgress = requiredProgress;
-                }
+                float requiredProgress = seg.balls[i + 1].pathProgress + spacingProgress;
+                if (seg.balls[i].pathProgress < requiredProgress)
+                    seg.balls[i].pathProgress = requiredProgress;
                 else
-                {
-                    break; // Rest of chain already has proper spacing
-                }
-            }
-        }
-
-        /// <summary>
-        /// Pushes balls backward from the insertion point to maintain proper spacing.
-        /// </summary>
-        private void PushBallsBackward(int startIndex)
-        {
-            if (startIndex >= ballChain.Count) return;
-
-            float pathLength = pathController.GetPathLength();
-            float spacingProgress = ballSpacing / pathLength;
-
-            for (int i = startIndex; i < ballChain.Count; i++)
-            {
-                // Calculate required spacing from previous ball
-                float requiredProgress = ballChain[i - 1].pathProgress - spacingProgress;
-
-                // Only push if too close
-                if (ballChain[i].pathProgress > requiredProgress)
-                {
-                    ballChain[i].pathProgress = requiredProgress;
-                }
-                else
-                {
-                    // Rest of chain has proper spacing
                     break;
-                }
             }
         }
 
-        /// <summary>
-        /// Updates chain indices after insertion/removal.
-        /// </summary>
-        private void UpdateChainIndices()
+        private void PushSegmentBallsBackward(ChainSegment seg, int startLocal, float spacingProgress)
         {
-            for (int i = 0; i < ballChain.Count; i++)
+            if (startLocal >= seg.Count) return;
+
+            for (int i = startLocal; i < seg.Count; i++)
             {
-                ballChain[i].chainIndex = i;
-                if (ballChain[i].ball != null)
-                {
-                    ballChain[i].ball.ChainIndex = i;
-                }
+                float requiredProgress = seg.balls[i - 1].pathProgress - spacingProgress;
+                if (seg.balls[i].pathProgress > requiredProgress)
+                    seg.balls[i].pathProgress = requiredProgress;
+                else
+                    break;
             }
         }
 
+        // --------------------------------------------------------------
+        // Removal (matches, projectile hits, power-ups)
+        // --------------------------------------------------------------
+
         /// <summary>
-        /// Removes balls from the chain and returns them to the pool.
+        /// Removes the given balls from their containing segments. Each segment is
+        /// scanned for split points after removal — non-contiguous removals split
+        /// a segment into multiple smaller segments.
         /// </summary>
         public void RemoveBalls(List<BallNode> nodesToRemove)
         {
+            if (nodesToRemove == null || nodesToRemove.Count == 0) return;
+
+            // Group removals by segment
+            var bySegment = new Dictionary<int, List<BallNode>>();
             foreach (var node in nodesToRemove)
             {
-                if (node.ball != null)
+                if (!bySegment.TryGetValue(node.segmentId, out var list))
                 {
-                    ballPool.Return(node.ball);
-                    node.ball.OnReturnToPool();
+                    list = new List<BallNode>();
+                    bySegment[node.segmentId] = list;
                 }
-                ballChain.Remove(node);
+                list.Add(node);
             }
 
+            foreach (var kvp in bySegment)
+            {
+                ChainSegment seg = GetSegmentById(kvp.Key);
+                if (seg == null) continue;
+
+                foreach (var node in kvp.Value)
+                {
+                    if (node.ball != null)
+                    {
+                        ballPool.Return(node.ball);
+                        node.ball.OnReturnToPool();
+                    }
+                    seg.balls.Remove(node);
+                }
+            }
+
+            SplitSegmentsAtGaps();
+            PruneEmptySegments();
             UpdateChainIndices();
         }
 
         /// <summary>
-        /// Updates visibility of all balls based on whether they're past the hole.
+        /// Removes the ball at the given global chain index.
         /// </summary>
-        private void UpdateBallVisibility()
+        public void RemoveBallAtIndex(int globalChainIndex)
         {
-            foreach (var node in ballChain)
+            BallNode node = GetNodeAtGlobalIndex(globalChainIndex);
+            if (node == null) return;
+
+            ChainSegment seg = GetSegmentById(node.segmentId);
+            if (seg == null) return;
+
+            if (node.ball != null)
             {
-                UpdateBallVisibility(node);
+                ballPool.Return(node.ball);
+                node.ball.OnReturnToPool();
             }
-        }
+            seg.balls.Remove(node);
 
-        private void UpdateBallVisibility(BallNode node)
-        {
-            if (node.ball == null) return;
-
-            bool shouldBeVisible = node.pathProgress >= holeProgress;
-            if (node.ball.gameObject.activeSelf != shouldBeVisible)
-            {
-                node.ball.gameObject.SetActive(shouldBeVisible);
-            }
+            SplitSegmentsAtGaps();
+            PruneEmptySegments();
+            UpdateChainIndices();
         }
 
         /// <summary>
-        /// Sets the movement speed of the ball chain.
+        /// Scans every segment for internal gaps wider than ballSpacing and splits them.
         /// </summary>
-        public void SetSpeed(float speed)
+        private void SplitSegmentsAtGaps()
         {
-            ballSpeed = speed;
-        }
-
-        /// <summary>
-        /// Pauses or resumes ball chain movement.
-        /// </summary>
-        public void SetMoving(bool moving)
-        {
-            isMoving = moving;
-        }
-
-        /// <summary>
-        /// Gets the ball chain for external access (e.g., match detection).
-        /// </summary>
-        public List<BallNode> GetBallChain()
-        {
-            return ballChain;
-        }
-
-        /// <summary>
-        /// Public wrapper so external systems (like intro animation) can update visuals.
-        /// </summary>
-        public void UpdateBallPositionsPublic()
-        {
-            UpdateBallPositions();
-        }
-
-        public void UpdateBallVisibilityPublic()
-        {
-            UpdateBallVisibility();
-        }
-
-        /// <summary>
-        /// Returns true when the tail ball has moved far enough that a new ball should be spawned behind it.
-        /// </summary>
-        public bool NeedsTailBall()
-        {
-            if (ballChain.Count == 0) return false;
-
             float pathLength = pathController.GetPathLength();
-            if (pathLength <= 0f) return false;
+            if (pathLength <= 0f) return;
 
             float spacingProgress = ballSpacing / pathLength;
-            BallNode tail = ballChain[ballChain.Count - 1];
-            return tail.pathProgress > holeProgress + spacingProgress;
+            float splitThreshold = spacingProgress * 1.5f;
+
+            int s = 0;
+            while (s < segments.Count)
+            {
+                ChainSegment seg = segments[s];
+                int splitAt = -1;
+
+                for (int i = 0; i < seg.Count - 1; i++)
+                {
+                    float gap = seg.balls[i].pathProgress - seg.balls[i + 1].pathProgress;
+                    if (gap > splitThreshold)
+                    {
+                        splitAt = i + 1;
+                        break;
+                    }
+                }
+
+                if (splitAt > 0)
+                {
+                    ChainSegment newSeg = new ChainSegment(nextSegmentId++);
+                    for (int i = splitAt; i < seg.Count; i++)
+                    {
+                        seg.balls[i].segmentId = newSeg.id;
+                        newSeg.balls.Add(seg.balls[i]);
+                    }
+                    seg.balls.RemoveRange(splitAt, seg.Count - splitAt);
+                    segments.Insert(s + 1, newSeg);
+                    // Re-scan the same index in case the new segment also has gaps
+                }
+                else
+                {
+                    s++;
+                }
+            }
         }
 
-        public float GetPathLength()
+        private void PruneEmptySegments()
         {
-            return pathController != null ? pathController.GetPathLength() : 0f;
+            for (int s = segments.Count - 1; s >= 0; s--)
+            {
+                if (segments[s].IsEmpty) segments.RemoveAt(s);
+            }
         }
 
-        /// <summary>
-        /// Inserts a Hammer power-up ball just behind the ball at insertAfterIndex.
-        /// The ball is visually golden and immune to color matching.
-        /// </summary>
-        public void SpawnHammerBall(int insertAfterIndex, float recoilDistance)
+        // --------------------------------------------------------------
+        // Hammer power-up insertion
+        // --------------------------------------------------------------
+
+        public void SpawnHammerBall(int insertAfterGlobalIndex, float recoilDistance)
         {
-            if (ballChain.Count == 0) return;
-            insertAfterIndex = Mathf.Clamp(insertAfterIndex, 0, ballChain.Count - 1);
+            BallNode anchor = GetNodeAtGlobalIndex(insertAfterGlobalIndex);
+            if (anchor == null) return;
+
+            ChainSegment seg = GetSegmentById(anchor.segmentId);
+            if (seg == null) return;
+
+            int localAnchor = seg.balls.IndexOf(anchor);
+            if (localAnchor < 0) return;
 
             Ball ball = ballPool.Get();
-            // Color is irrelevant visually (overridden by SetAsPowerUp) but must be valid
-            ball.Initialize(BallColor.Red);
+            ball.Initialize(BallColor.Red); // color overridden by SetAsPowerUp visuals
             ball.SetAsPowerUp(BallPowerUpType.Hammer, recoilDistance);
             ball.OnGetFromPool();
 
             float pathLength = pathController.GetPathLength();
             float spacingProgress = ballSpacing / pathLength;
 
-            // Place it just behind the reference ball
-            float insertAt = ballChain[insertAfterIndex].pathProgress - spacingProgress;
-            int insertIndex = insertAfterIndex;
+            float insertAt = anchor.pathProgress - spacingProgress;
 
-            BallNode newNode = new BallNode(ball, insertAt, insertIndex);
-            ballChain.Insert(insertIndex, newNode);
-            PushBallsBackward(insertIndex + 1);
+            BallNode newNode = new BallNode(ball, insertAt, 0);
+            newNode.segmentId = seg.id;
+            seg.balls.Insert(localAnchor, newNode);
+
+            PushSegmentBallsBackward(seg, localAnchor + 1, spacingProgress);
             UpdateChainIndices();
 
-            Debug.Log($"Hammer ball spawned at chain index {insertIndex}.");
+            Debug.Log($"Hammer ball spawned in segment {seg.id} at local {localAnchor}.");
         }
 
-        /// <summary>
-        /// Removes the ball at the given chain index and returns it to the pool.
-        /// Used when a power-up ball is consumed (e.g. hit by a projectile).
-        /// </summary>
-        public void RemoveBallAtIndex(int chainIndex)
+        // --------------------------------------------------------------
+        // Visibility / hole logic
+        // --------------------------------------------------------------
+
+        private void UpdateBallVisibility()
         {
-            if (chainIndex < 0 || chainIndex >= ballChain.Count) return;
-
-            BallNode node = ballChain[chainIndex];
-            if (node.ball != null)
+            for (int s = 0; s < segments.Count; s++)
             {
-                ballPool.Return(node.ball);
-                node.ball.OnReturnToPool();
-            }
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
+                {
+                    var node = segment.balls[i];
+                    if (node.ball == null) continue;
 
-            ballChain.RemoveAt(chainIndex);
-            UpdateChainIndices();
+                    bool shouldBeVisible = node.pathProgress >= holeProgress;
+                    if (node.ball.gameObject.activeSelf != shouldBeVisible)
+                        node.ball.gameObject.SetActive(shouldBeVisible);
+                }
+            }
         }
 
-        /// <summary>
-        /// Returns true if any ball in the chain is past the hole (i.e. visible on screen).
-        /// Used by GameManager to detect the "retreat into hole" win condition.
-        /// </summary>
         public bool HasVisibleBalls()
         {
-            foreach (var node in ballChain)
+            for (int s = 0; s < segments.Count; s++)
             {
-                if (node.pathProgress >= holeProgress)
-                    return true;
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
+                {
+                    if (segment.balls[i].pathProgress >= holeProgress) return true;
+                }
             }
             return false;
         }
 
         /// <summary>
-        /// Clears all balls from the chain.
+        /// True when the back-most segment's tail has cleared the hole spacing,
+        /// signaling that BallSpawner can drop a new tail ball.
         /// </summary>
-        public void ClearChain()
+        public bool NeedsTailBall()
         {
-            foreach (var node in ballChain)
+            ChainSegment back = GetBackSegment();
+            if (back == null || back.IsEmpty) return false;
+
+            float pathLength = pathController.GetPathLength();
+            if (pathLength <= 0f) return false;
+
+            float spacingProgress = ballSpacing / pathLength;
+            return back.Tail.pathProgress > holeProgress + spacingProgress;
+        }
+
+        // --------------------------------------------------------------
+        // Internal helpers
+        // --------------------------------------------------------------
+
+        private void SortSegmentsByProgress()
+        {
+            segments.Sort((a, b) =>
             {
-                if (node.ball != null)
+                if (a.IsEmpty) return 1;
+                if (b.IsEmpty) return -1;
+                return b.Lead.pathProgress.CompareTo(a.Lead.pathProgress);
+            });
+        }
+
+        private void UpdateChainIndices()
+        {
+            int globalIndex = 0;
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
                 {
-                    ballPool.Return(node.ball);
-                    node.ball.OnReturnToPool();
+                    segment.balls[i].chainIndex = globalIndex;
+                    segment.balls[i].segmentId = segment.id;
+                    if (segment.balls[i].ball != null)
+                        segment.balls[i].ball.ChainIndex = globalIndex;
+                    globalIndex++;
                 }
             }
-            ballChain.Clear();
+        }
+
+        private int FindNearestBallInSegments(float progress, out ChainSegment foundSegment)
+        {
+            foundSegment = null;
+            int bestLocal = -1;
+            float bestDistance = float.MaxValue;
+
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
+                {
+                    float distance = Mathf.Abs(segment.balls[i].pathProgress - progress);
+                    if (distance < bestDistance)
+                    {
+                        bestDistance = distance;
+                        bestLocal = i;
+                        foundSegment = segment;
+                    }
+                }
+            }
+
+            return bestLocal;
+        }
+
+        private ChainSegment GetBackSegment()
+        {
+            if (segments.Count == 0) return null;
+            return segments[segments.Count - 1];
+        }
+
+        private ChainSegment GetSegmentById(int id)
+        {
+            for (int s = 0; s < segments.Count; s++)
+                if (segments[s].id == id) return segments[s];
+            return null;
+        }
+
+        private BallNode GetNodeAtGlobalIndex(int globalIndex)
+        {
+            int running = 0;
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var segment = segments[s];
+                if (globalIndex < running + segment.Count)
+                    return segment.balls[globalIndex - running];
+                running += segment.Count;
+            }
+            return null;
+        }
+
+        private int GlobalIndexOf(BallNode node)
+        {
+            int running = 0;
+            for (int s = 0; s < segments.Count; s++)
+            {
+                int local = segments[s].balls.IndexOf(node);
+                if (local >= 0) return running + local;
+                running += segments[s].Count;
+            }
+            return -1;
+        }
+
+        // --------------------------------------------------------------
+        // Public API
+        // --------------------------------------------------------------
+
+        /// <summary>
+        /// Returns a flattened front-to-back view of all balls in the chain.
+        /// Useful for legacy iteration; segment boundaries are not visible in this view.
+        /// </summary>
+        public List<BallNode> GetBallChain()
+        {
+            var flat = new List<BallNode>(BallCount);
+            for (int s = 0; s < segments.Count; s++)
+                flat.AddRange(segments[s].balls);
+            return flat;
+        }
+
+        /// <summary>
+        /// Returns the live list of segments. Mutating the returned list directly is unsafe;
+        /// segments may be added, removed, or split during gameplay.
+        /// </summary>
+        public List<ChainSegment> GetSegments()
+        {
+            return segments;
+        }
+
+        /// <summary>
+        /// Returns the segment containing the ball at the given global chain index, or null.
+        /// </summary>
+        public ChainSegment GetSegmentForChainIndex(int globalIndex)
+        {
+            BallNode node = GetNodeAtGlobalIndex(globalIndex);
+            if (node == null) return null;
+            return GetSegmentById(node.segmentId);
+        }
+
+        public void SetSpeed(float speed) { ballSpeed = speed; }
+        public void SetMoving(bool moving) { isMoving = moving; }
+
+        public void UpdateBallPositionsPublic() { UpdateBallPositions(); }
+        public void UpdateBallVisibilityPublic() { UpdateBallVisibility(); }
+
+        public float GetPathLength()
+        {
+            return pathController != null ? pathController.GetPathLength() : 0f;
+        }
+
+        public void ClearChain()
+        {
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
+                {
+                    var node = segment.balls[i];
+                    if (node.ball != null)
+                    {
+                        ballPool.Return(node.ball);
+                        node.ball.OnReturnToPool();
+                    }
+                }
+            }
+            segments.Clear();
         }
 
         private void OnDestroy()

@@ -7,6 +7,7 @@ namespace YuumisProwl.PowerUps
     public enum PowerUpType
     {
         None,
-        Pierce
+        Pierce,
+        Bomb
     }
 }

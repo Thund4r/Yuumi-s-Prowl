@@ -8,12 +8,14 @@ namespace YuumisProwl.BallChain
         public Ball ball;
         public float pathProgress;
         public int chainIndex;
+        public int segmentId;
 
         public BallNode(Ball ball, float pathProgress, int chainIndex)
         {
             this.ball = ball;
             this.pathProgress = pathProgress;
             this.chainIndex = chainIndex;
+            this.segmentId = -1;
         }
     }
 }

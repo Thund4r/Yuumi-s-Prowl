@@ -40,5 +40,9 @@ namespace YuumisProwl.PowerUps
         public float pierceMaxDistance = 30f;
         [Tooltip("Travel speed multiplier for Pierce projectiles (relative to normal homing speed).")]
         public float pierceSpeedMultiplier = 2f;
+
+        [Header("Bomb")]
+        [Tooltip("World-space radius of the explosion that destroys balls on contact.")]
+        public float bombRadius = 3f;
     }
 }

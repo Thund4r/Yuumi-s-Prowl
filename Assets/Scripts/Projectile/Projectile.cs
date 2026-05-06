@@ -46,6 +46,7 @@ namespace YuumisProwl.Projectile
         private float pierceSpeedMultiplier = 1f;
         private float distanceTraveled;
         private int pierceDestroyCount;
+        private float bombRadius;
 
         public BallColor ProjectileColor => projectileColor;
         public PowerUpType EquippedPowerUp => equippedPowerUp;
@@ -125,13 +126,14 @@ namespace YuumisProwl.Projectile
         /// For Pierce, pierceDistance caps how far the projectile travels before despawning,
         /// and speedMultiplier scales its flight speed.
         /// </summary>
-        public void SetPowerUp(PowerUpType type, float pierceDistance = 0f, float speedMultiplier = 1f)
+        public void SetPowerUp(PowerUpType type, float pierceDistance = 0f, float speedMultiplier = 1f, float bombExplosionRadius = 0f)
         {
             equippedPowerUp = type;
             pierceMaxDistance = pierceDistance;
             pierceSpeedMultiplier = speedMultiplier > 0f ? speedMultiplier : 1f;
             distanceTraveled = 0f;
             pierceDestroyCount = 0;
+            bombRadius = bombExplosionRadius;
             UpdateVisuals();
         }
 
@@ -197,9 +199,13 @@ namespace YuumisProwl.Projectile
                 projectileMaterial = meshRenderer.material;
             }
 
-            Color baseColor = equippedPowerUp == PowerUpType.Pierce
-                ? Color.white
-                : BallColorUtils.ToUnityColor(projectileColor);
+            Color baseColor;
+            switch (equippedPowerUp)
+            {
+                case PowerUpType.Pierce: baseColor = Color.white; break;
+                case PowerUpType.Bomb:   baseColor = new Color(1f, 0.4f, 0f); break; // orange
+                default:                 baseColor = BallColorUtils.ToUnityColor(projectileColor); break;
+            }
 
             if (projectileMaterial != null)
             {
@@ -220,6 +226,14 @@ namespace YuumisProwl.Projectile
         {
             if (!isActive) return;
 
+            // Bomb: explode on contact with anything (ball or obstacle)
+            if (equippedPowerUp == PowerUpType.Bomb)
+            {
+                if (other.CompareTag("Ball") || other.GetComponent<Obstacle>() != null)
+                    ExecuteBombExplosion();
+                return;
+            }
+
             if (other.CompareTag("Ball"))
             {
                 Ball hitBall = other.GetComponent<Ball>();
@@ -233,10 +247,14 @@ namespace YuumisProwl.Projectile
                         int hammerIndex = hammer.ChainIndex;
                         float recoilDistance = hammer.PowerUpValue;
 
+                        // Capture which segment the hammer was in BEFORE removing it,
+                        // so we recoil only that segment.
+                        int recoilSegmentChainIndex = hammerIndex;
+
                         ballChainManager.RemoveBallAtIndex(hammerIndex);
 
                         if (matchProcessor != null)
-                            matchProcessor.TriggerRecoil(recoilDistance);
+                            matchProcessor.TriggerRecoil(recoilDistance, recoilSegmentChainIndex);
 
                         Debug.Log($"Hammer triggered! Recoil distance: {recoilDistance}");
 
@@ -272,25 +290,70 @@ namespace YuumisProwl.Projectile
 
         /// <summary>
         /// Returns a hammer ball if the hit ball itself is a hammer, or if either
-        /// direct neighbor in the chain is a hammer. Returns null if no hammer is nearby.
+        /// direct neighbor *in the same segment* is a hammer. Neighbors across a
+        /// segment gap don't count.
         /// </summary>
         private Ball FindAdjacentHammer(Ball hitBall)
         {
             if (hitBall.PowerUpType == BallPowerUpType.Hammer)
                 return hitBall;
 
-            var chain = ballChainManager.GetBallChain();
-            int index = hitBall.ChainIndex;
+            ChainSegment seg = ballChainManager.GetSegmentForChainIndex(hitBall.ChainIndex);
+            if (seg == null) return null;
 
-            // Check neighbor ahead (lower index = further along path)
-            if (index - 1 >= 0 && chain[index - 1].ball.PowerUpType == BallPowerUpType.Hammer)
-                return chain[index - 1].ball;
+            int local = -1;
+            for (int i = 0; i < seg.Count; i++)
+            {
+                if (seg.balls[i].ball == hitBall) { local = i; break; }
+            }
+            if (local < 0) return null;
 
-            // Check neighbor behind
-            if (index + 1 < chain.Count && chain[index + 1].ball.PowerUpType == BallPowerUpType.Hammer)
-                return chain[index + 1].ball;
+            if (local - 1 >= 0 && seg.balls[local - 1].ball.PowerUpType == BallPowerUpType.Hammer)
+                return seg.balls[local - 1].ball;
+
+            if (local + 1 < seg.Count && seg.balls[local + 1].ball.PowerUpType == BallPowerUpType.Hammer)
+                return seg.balls[local + 1].ball;
 
             return null;
+        }
+
+        /// <summary>
+        /// Explodes at the current position, destroying all balls within bombRadius.
+        /// Hands off to MatchProcessor for cascade processing, then returns to pool.
+        /// </summary>
+        private void ExecuteBombExplosion()
+        {
+            Collider[] hits = Physics.OverlapSphere(transform.position, bombRadius);
+
+            List<int> indicesToRemove = new List<int>();
+            foreach (var hit in hits)
+            {
+                if (hit.CompareTag("Ball"))
+                {
+                    Ball ball = hit.GetComponent<Ball>();
+                    if (ball != null && !indicesToRemove.Contains(ball.ChainIndex))
+                        indicesToRemove.Add(ball.ChainIndex);
+                }
+            }
+
+            // Remove highest indices first so earlier indices stay valid
+            indicesToRemove.Sort((a, b) => b.CompareTo(a));
+
+            foreach (int index in indicesToRemove)
+            {
+                if (ballChainManager != null)
+                    ballChainManager.RemoveBallAtIndex(index);
+            }
+
+            Debug.Log($"Bomb exploded! Destroyed {indicesToRemove.Count} balls in radius {bombRadius}.");
+
+            if (matchProcessor != null)
+                matchProcessor.ProcessPierceAftermath(indicesToRemove.Count);
+
+            if (ownerSpawner != null)
+                ownerSpawner.ReturnProjectile(this);
+            else
+                Deactivate();
         }
 
         /// <summary>
@@ -364,6 +427,7 @@ namespace YuumisProwl.Projectile
             pierceSpeedMultiplier = 1f;
             distanceTraveled = 0f;
             pierceDestroyCount = 0;
+            bombRadius = 0f;
 
             if (trailRenderer != null)
             {

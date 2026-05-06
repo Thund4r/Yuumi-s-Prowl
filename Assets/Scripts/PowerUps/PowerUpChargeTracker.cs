@@ -89,8 +89,8 @@ namespace YuumisProwl.PowerUps
         {
             if (inventory == null) return;
 
-            // Only Pierce for now — expand this pool as new types ship.
-            PowerUpType awarded = PowerUpType.Pierce;
+            PowerUpType[] pool = { PowerUpType.Pierce, PowerUpType.Bomb };
+            PowerUpType awarded = pool[Random.Range(0, pool.Length)];
 
             bool added = inventory.AddPowerUp(awarded);
             if (!added)
