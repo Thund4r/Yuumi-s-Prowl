@@ -90,26 +90,68 @@ namespace YuumisProwl.BallChain
         {
             ChainSegment seg = ballChainManager.GetSegmentForChainIndex(globalInsertedIndex);
             if (seg == null) return;
-            StartCoroutine(CheckMatchesAfterInsertion(seg, globalInsertedIndex));
+
+            // Capture the inserted node by reference so we can find it later even if the
+            // segment is renumbered or absorbed during the destructionDelay wait.
+            BallNode insertedNode = null;
+            for (int i = 0; i < seg.Count; i++)
+            {
+                if (seg.balls[i].chainIndex == globalInsertedIndex)
+                {
+                    insertedNode = seg.balls[i];
+                    break;
+                }
+            }
+            if (insertedNode == null) return;
+
+            StartCoroutine(CheckMatchesAfterInsertion(insertedNode));
         }
 
-        private IEnumerator CheckMatchesAfterInsertion(ChainSegment seg, int globalInsertedIndex)
+        private IEnumerator CheckMatchesAfterInsertion(BallNode insertedNode)
         {
-            // Don't re-enter for the SAME segment, but other segments are fine.
-            int segId = seg.id;
-            if (sequencesById.ContainsKey(segId)) yield break;
-
             yield return new WaitForSeconds(destructionDelay);
 
-            seg = FindSegmentById(segId);
+            // Look up by the node's current segmentId — this is updated during merges,
+            // so it always points to the live segment containing the ball.
+            ChainSegment seg = FindSegmentById(insertedNode.segmentId);
             if (seg == null) yield break;
 
-            int localIndex = LocalIndexOfGlobal(seg, globalInsertedIndex);
-            if (localIndex < 0) yield break;
+            int localIndex = seg.balls.IndexOf(insertedNode);
+            if (localIndex < 0) yield break; // ball was destroyed during the wait
 
             List<BallNode> matched = matchDetector.DetectMatchAtIndex(seg.balls, localIndex);
-            if (matched.Count > 0)
+            if (matched.Count == 0) yield break;
+
+            if (sequencesById.TryGetValue(seg.id, out var existingSeq))
+            {
+                // A sequence is already active on this segment (e.g. mid-gap-closing).
+                // Don't start a nested ProcessMatches — just remove the matched balls and
+                // attribute them to the existing sequence. The existing WaitForBackMost
+                // will continue, and any cascades from this removal are detected at merge
+                // boundaries via the OnSegmentsMerged handler.
+                int gapGlobalBeforeRemoval = matched[0].chainIndex;
+                BallColor matchedColor = matched[0].ball.BallColor;
+                int destroyedCount = matched.Count;
+
+                ballChainManager.RemoveBalls(matched);
+                existingSeq.matchCount++;
+                existingSeq.lastGapGlobalIndex = gapGlobalBeforeRemoval;
+
+                OnBallsDestroyed?.Invoke(destroyedCount, matchedColor);
+                Debug.Log($"Mid-sequence match: destroyed {destroyedCount} {matchedColor} balls.");
+
+                if (ballChainManager.BallCount == 0)
+                {
+                    int cascadeCount = existingSeq.matchCount - 1;
+                    OnMatchSequenceComplete?.Invoke(cascadeCount, -1);
+                    OnChainCleared?.Invoke();
+                    sequencesById.Clear();
+                }
+            }
+            else
+            {
                 yield return StartCoroutine(ProcessMatches(seg, matched));
+            }
         }
 
         // --------------------------------------------------------------

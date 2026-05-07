@@ -266,7 +266,7 @@ namespace YuumisProwl.Projectile
                     else
                     {
                         float insertProgress = hitBall.PathProgress;
-                        ballChainManager.InsertBallAtProgress(projectileColor, insertProgress);
+                        ballChainManager.InsertBallAtProgress(projectileColor, insertProgress, transform.position);
 
                         Debug.Log($"Projectile hit ball! Inserting {projectileColor} at progress {insertProgress:F2}");
 

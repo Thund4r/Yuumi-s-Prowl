@@ -3539,6 +3539,7 @@ MonoBehaviour:
   ballSpeed: 0.5
   ballSpacing: 0.5
   gapCloseSpeed: 2
+  insertionDuration: 0.15
   initialPoolSize: 50
   holeProgress: 0
 --- !u!4 &1842243457
@@ -3609,7 +3610,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ballChainManager: {fileID: 1842243456}
-  destructionDelay: 0.1
+  destructionDelay: 0.3
   enableDestructionEffects: 1
   baseRecoilDistance: 0.3
   recoilScalePerMatch: 0.2

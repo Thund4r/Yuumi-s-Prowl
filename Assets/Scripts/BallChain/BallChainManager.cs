@@ -29,6 +29,10 @@ namespace YuumisProwl.BallChain
         [Tooltip("Speed at which a trailing segment catches up to the segment ahead.")]
         [SerializeField] private float gapCloseSpeed = 2f;
 
+        [Header("Insertion Animation")]
+        [Tooltip("Seconds taken for an inserted ball to ease into place (and for the chain in front of it to slide forward by one ball spacing).")]
+        [SerializeField] private float insertionDuration = 0.15f;
+
         [Header("Pool Settings")]
         [SerializeField] private int initialPoolSize = 50;
 
@@ -83,8 +87,41 @@ namespace YuumisProwl.BallChain
             {
                 MoveChain(Time.deltaTime);
                 MergeTouchingSegments();
+                DecaySmoothShifts(Time.deltaTime);
                 UpdateBallVisibility();
                 UpdateBallPositions();
+            }
+        }
+
+        /// <summary>
+        /// Eases each ball's smoothShift (path-progress) and worldOffset (world-space) toward
+        /// zero. These offsets are set when a ball is inserted (or pushed by an insertion);
+        /// decaying them makes the chain slide smoothly into its new positions instead of
+        /// snapping, and lets a freshly-inserted ball glide along its trajectory into place.
+        /// </summary>
+        private void DecaySmoothShifts(float deltaTime)
+        {
+            if (insertionDuration <= 0f) return;
+
+            float pathLength = pathController != null ? pathController.GetPathLength() : 0f;
+            if (pathLength <= 0f) return;
+
+            // Path-progress decay (one ball-spacing per insertionDuration in progress units).
+            float pathDecay = (ballSpacing / pathLength) / insertionDuration * deltaTime;
+            // World-space decay (one ball-spacing per insertionDuration in world units).
+            float worldDecay = ballSpacing / insertionDuration * deltaTime;
+
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
+                {
+                    var node = segment.balls[i];
+                    if (node.smoothShift != 0f)
+                        node.smoothShift = Mathf.MoveTowards(node.smoothShift, 0f, pathDecay);
+                    if (node.worldOffset != Vector3.zero)
+                        node.worldOffset = Vector3.MoveTowards(node.worldOffset, Vector3.zero, worldDecay);
+                }
             }
         }
 
@@ -218,10 +255,16 @@ namespace YuumisProwl.BallChain
                     var node = segment.balls[i];
                     if (node.ball == null || !node.ball.gameObject.activeSelf) continue;
 
-                    node.ball.transform.position = pathController.GetPointOnPath(Mathf.Max(node.pathProgress, holeProgress));
+                    // Visual position uses smoothShift (path-progress) and worldOffset
+                    // (world-space) on top of the logical pathProgress so insertions ease
+                    // into place. Logical PathProgress (used by projectile hits, match
+                    // detection, etc.) stays unshifted.
+                    float visualProgress = Mathf.Max(node.pathProgress + node.smoothShift, holeProgress);
+
+                    node.ball.transform.position = pathController.GetPointOnPath(visualProgress) + node.worldOffset;
                     node.ball.PathProgress = node.pathProgress;
 
-                    Vector3 direction = pathController.GetDirectionOnPath(Mathf.Max(node.pathProgress, holeProgress));
+                    Vector3 direction = pathController.GetDirectionOnPath(visualProgress);
                     if (direction != Vector3.zero)
                     {
                         float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
@@ -274,7 +317,7 @@ namespace YuumisProwl.BallChain
         // Insertion (projectile hits)
         // --------------------------------------------------------------
 
-        public void InsertBallAtProgress(BallColor color, float insertProgress)
+        public void InsertBallAtProgress(BallColor color, float insertProgress, Vector3? projectileWorldPos = null)
         {
             Ball ball = ballPool.Get();
             ball.Initialize(color);
@@ -321,9 +364,25 @@ namespace YuumisProwl.BallChain
 
             BallNode newNode = new BallNode(ball, insertAt, 0);
             newNode.segmentId = hitSegment.id;
+
+            // Start the new ball visually at the projectile's actual world position (often
+            // off the path) so it slides into its target as the worldOffset decays to zero.
+            // Falls back to a path-progress offset (visually starting at the projectile's
+            // path-progress) if no world position was supplied by the caller.
+            if (projectileWorldPos.HasValue && pathController != null)
+            {
+                Vector3 targetPathPos = pathController.GetPointOnPath(insertAt);
+                newNode.worldOffset = projectileWorldPos.Value - targetPathPos;
+            }
+            else
+            {
+                newNode.smoothShift = insertProgress - insertAt;
+            }
             hitSegment.balls.Insert(insertLocal, newNode);
 
-            // Re-space within this segment
+            // Re-space within this segment. The push functions record the push amounts
+            // into smoothShift so the affected balls visually lag behind their logical
+            // positions and ease into place.
             PushSegmentBallsForward(hitSegment, insertLocal - 1, spacingProgress);
             PushSegmentBallsBackward(hitSegment, insertLocal + 1, spacingProgress);
 
@@ -334,6 +393,11 @@ namespace YuumisProwl.BallChain
             OnBallInserted?.Invoke(globalInsertedIdx);
         }
 
+        /// <summary>
+        /// Pushes balls forward (toward the lead) to maintain spacing after an insertion.
+        /// The amount each ball is shifted is recorded in its smoothShift so the visual
+        /// position lags behind the logical position and eases forward smoothly.
+        /// </summary>
         private void PushSegmentBallsForward(ChainSegment seg, int startLocal, float spacingProgress)
         {
             if (startLocal < 0) return;
@@ -342,12 +406,23 @@ namespace YuumisProwl.BallChain
             {
                 float requiredProgress = seg.balls[i + 1].pathProgress + spacingProgress;
                 if (seg.balls[i].pathProgress < requiredProgress)
+                {
+                    float pushAmount = requiredProgress - seg.balls[i].pathProgress;
                     seg.balls[i].pathProgress = requiredProgress;
+                    seg.balls[i].smoothShift -= pushAmount; // visual stays behind, eases forward
+                }
                 else
+                {
                     break;
+                }
             }
         }
 
+        /// <summary>
+        /// Pushes balls backward (toward the tail) to maintain spacing after an insertion.
+        /// Mirrors PushSegmentBallsForward — records the push amount in smoothShift so the
+        /// visible balls keep their old positions and ease backward.
+        /// </summary>
         private void PushSegmentBallsBackward(ChainSegment seg, int startLocal, float spacingProgress)
         {
             if (startLocal >= seg.Count) return;
@@ -356,9 +431,15 @@ namespace YuumisProwl.BallChain
             {
                 float requiredProgress = seg.balls[i - 1].pathProgress - spacingProgress;
                 if (seg.balls[i].pathProgress > requiredProgress)
+                {
+                    float pushAmount = seg.balls[i].pathProgress - requiredProgress;
                     seg.balls[i].pathProgress = requiredProgress;
+                    seg.balls[i].smoothShift += pushAmount; // visual stays ahead, eases backward
+                }
                 else
+                {
                     break;
+                }
             }
         }
 

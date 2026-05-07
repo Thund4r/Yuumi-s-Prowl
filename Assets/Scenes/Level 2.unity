@@ -3453,7 +3453,7 @@ MonoBehaviour:
   ballPrefab: {fileID: 4851934998205278452, guid: e7f02bbc6aa62bb43ae9d05c1d8fbbc9, type: 3}
   ballSpeed: 0.5
   ballSpacing: 0.5
-  gapCloseSpeed: 5
+  gapCloseSpeed: 2
   initialPoolSize: 50
   holeProgress: 0
 --- !u!4 &1842243457
