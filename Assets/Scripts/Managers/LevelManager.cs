@@ -1,18 +1,17 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using System.Collections;
 using YuumisProwl.BallChain;
 
 namespace YuumisProwl.Managers
 {
     /// <summary>
-    /// Manages level flow and scene transitions.
+    /// Loads map prefabs into the active scene. Each map prefab carries its own
+    /// PathController (with SplineContainer), obstacles, decorations, and LevelData.
+    /// LevelManager instantiates a map, wires its PathController into the persistent
+    /// BallChainManager, applies the map's LevelData, and triggers BallSpawner.
     ///
-    /// On win:  balls stop → brief pause → transition scene plays (next level loads in background)
-    ///          → animation finishes → new level pops in.
-    /// On lose: balls stop → brief pause → retry scene reloads directly (no transition animation).
-    ///
-    /// Each playable scene is self-contained. Set the transition scene name once on this component.
+    /// On win:  advance to the next map (or loop / stop on final).
+    /// On lose: re-instantiate the current map.
     /// </summary>
     public class LevelManager : MonoBehaviour
     {
@@ -21,35 +20,32 @@ namespace YuumisProwl.Managers
         [SerializeField] private BallSpawner ballSpawner;
         [SerializeField] private GameManager gameManager;
 
-        [Header("Level Config")]
-        [SerializeField] private LevelData levelData;
+        [Header("Maps")]
+        [Tooltip("Map prefabs played in order. Each prefab's root must have a Map component.")]
+        [SerializeField] private Map[] mapPrefabs;
+        [Tooltip("Where instantiated maps are parented. Leave null to parent to this transform.")]
+        [SerializeField] private Transform mapRoot;
+        [Tooltip("If true, after the final map is won the loader wraps back to map 0.")]
+        [SerializeField] private bool loopMaps = true;
 
         [Header("Transition")]
-        [Tooltip("Name of the transition scene that plays between levels. " +
-                 "Leave empty to skip the transition and load the next level directly.")]
-        [SerializeField] private string transitionSceneName = "Transition";
-        [Tooltip("Seconds between the level ending and the transition scene (or next level) loading.")]
-        [SerializeField] private float pauseBeforeTransition = 0.5f;
+        [Tooltip("Seconds between a map ending and the next/retry map loading.")]
+        [SerializeField] private float pauseBetweenMaps = 0.5f;
 
-        /// <summary>
-        /// True from the moment a level ends until the next scene loads.
-        /// ProjectileSpawner reads this to block shooting.
-        /// </summary>
         public bool IsTransitioning { get; private set; }
+        public Map CurrentMap => currentMapInstance;
+        public LevelData CurrentLevel => currentMapInstance != null ? currentMapInstance.LevelData : null;
 
-        public LevelData CurrentLevel => levelData;
+        private Map currentMapInstance;
+        private int currentMapIndex = 0;
 
         private void Awake()
         {
-            if (levelData != null)
-                ApplyLevelSettings(levelData);
+            if (mapRoot == null) mapRoot = transform;
         }
 
         private void Start()
         {
-            if (levelData == null)
-                Debug.LogWarning("LevelManager: No LevelData assigned!");
-
             if (gameManager == null)
             {
                 Debug.LogError("LevelManager: GameManager not assigned!");
@@ -58,6 +54,14 @@ namespace YuumisProwl.Managers
 
             gameManager.OnGameWon  += HandleLevelWon;
             gameManager.OnGameLost += HandleLevelLost;
+
+            if (mapPrefabs == null || mapPrefabs.Length == 0)
+            {
+                Debug.LogError("LevelManager: No map prefabs assigned!");
+                return;
+            }
+
+            LoadMap(0);
         }
 
         private void OnDestroy()
@@ -69,84 +73,98 @@ namespace YuumisProwl.Managers
             }
         }
 
-        // ── Win ─────────────────────────────────────────────────────────────────
+        private void LoadMap(int index)
+        {
+            if (mapPrefabs == null || mapPrefabs.Length == 0) return;
+            index = Mathf.Clamp(index, 0, mapPrefabs.Length - 1);
+
+            if (currentMapInstance != null)
+            {
+                Destroy(currentMapInstance.gameObject);
+                currentMapInstance = null;
+            }
+
+            if (ballChainManager != null)
+                ballChainManager.ClearChain();
+
+            currentMapIndex = index;
+            currentMapInstance = Instantiate(mapPrefabs[index], mapRoot);
+
+            if (ballChainManager != null)
+                ballChainManager.SetPathController(currentMapInstance.PathController);
+
+            LevelData data = currentMapInstance.LevelData;
+            if (data != null)
+            {
+                if (ballChainManager != null)
+                    ballChainManager.SetSpeed(data.ballSpeed);
+
+                if (ballSpawner != null)
+                {
+                    ballSpawner.SetColorCount(data.colorCount);
+                    ballSpawner.SetTotalBalls(data.totalBalls);
+                }
+            }
+
+            if (gameManager != null)
+                gameManager.InitializeGame();
+
+            if (ballChainManager != null)
+                ballChainManager.SetMoving(true);
+
+            if (ballSpawner != null)
+                ballSpawner.StartLevel();
+
+            IsTransitioning = false;
+        }
 
         private void HandleLevelWon()
         {
-            StartCoroutine(WinRoutine());
+            StartCoroutine(AdvanceAfterPause());
         }
 
-        private IEnumerator WinRoutine()
+        private IEnumerator AdvanceAfterPause()
         {
             IsTransitioning = true;
 
             if (ballChainManager != null)
                 ballChainManager.SetMoving(false);
 
-            yield return new WaitForSeconds(pauseBeforeTransition);
+            yield return new WaitForSeconds(pauseBetweenMaps);
 
-            string nextLevel = levelData != null ? levelData.nextSceneName : "";
-
-            if (string.IsNullOrEmpty(nextLevel))
+            int next = currentMapIndex + 1;
+            if (next >= mapPrefabs.Length)
             {
-                // No next level configured — this is the final level.
-                Debug.Log("LevelManager: No next level set. This appears to be the final level.");
-                IsTransitioning = false;
-                yield break;
+                if (loopMaps)
+                {
+                    next = 0;
+                }
+                else
+                {
+                    Debug.Log("LevelManager: All maps complete.");
+                    IsTransitioning = false;
+                    yield break;
+                }
             }
 
-            if (!string.IsNullOrEmpty(transitionSceneName))
-            {
-                // Store the destination so TransitionController can read it,
-                // then load the transition scene.
-                LevelTransitionData.NextSceneName = nextLevel;
-                SceneManager.LoadScene(transitionSceneName);
-            }
-            else
-            {
-                // No transition scene — jump straight to the next level.
-                SceneManager.LoadScene(nextLevel);
-            }
+            LoadMap(next);
         }
-
-        // ── Lose ────────────────────────────────────────────────────────────────
 
         private void HandleLevelLost()
         {
-            StartCoroutine(LoseRoutine());
+            StartCoroutine(RetryAfterPause());
         }
 
-        private IEnumerator LoseRoutine()
+        private IEnumerator RetryAfterPause()
         {
             IsTransitioning = true;
 
             if (ballChainManager != null)
                 ballChainManager.SetMoving(false);
 
-            yield return new WaitForSeconds(pauseBeforeTransition);
+            yield return new WaitForSeconds(pauseBetweenMaps);
 
-            string retryScene = (levelData != null && !string.IsNullOrEmpty(levelData.retrySceneName))
-                ? levelData.retrySceneName
-                : SceneManager.GetActiveScene().name;
-
-            SceneManager.LoadScene(retryScene);
-        }
-
-        // ── Helpers ─────────────────────────────────────────────────────────────
-
-        private void ApplyLevelSettings(LevelData data)
-        {
-            if (ballChainManager != null)
-            {
-                ballChainManager.InitializePool(data.totalBalls);
-                ballChainManager.SetSpeed(data.ballSpeed);
-            }
-
-            if (ballSpawner != null)
-            {
-                ballSpawner.SetColorCount(data.colorCount);
-                ballSpawner.SetTotalBalls(data.totalBalls);
-            }
+            LoadMap(currentMapIndex);
         }
     }
 }

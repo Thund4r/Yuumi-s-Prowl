@@ -49,10 +49,9 @@ namespace YuumisProwl.BallChain
             {
                 Debug.LogError("BallSpawner: BallChainManager not assigned!");
                 enabled = false;
-                return;
             }
-
-            StartLevel();
+            // StartLevel is driven by LevelManager once a map prefab has been
+            // instantiated and its PathController has been bound.
         }
 
         /// <summary>

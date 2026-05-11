@@ -67,18 +67,27 @@ namespace YuumisProwl.BallChain
             }
         }
 
-        private void Awake() { }
-
-        private void Start()
+        private void Awake()
         {
-            if (pathController == null)
-            {
-                Debug.LogError("BallChainManager: PathController not assigned!");
-                enabled = false;
-            }
-
+            // Initialize in Awake (not Start) so the pool is ready before
+            // LevelManager.Start kicks off LoadMap → BallSpawner.StartLevel,
+            // which calls SpawnBall on this manager. Start-order between
+            // MonoBehaviours is not guaranteed.
             if (ballPool == null)
                 InitializePool(initialPoolSize);
+        }
+
+        /// <summary>
+        /// Assigns the active PathController at runtime (called by LevelManager
+        /// after a map prefab is instantiated). The PathController lives on the
+        /// map prefab alongside its SplineContainer; this method lets the persistent
+        /// scene systems rebind to it on each map load.
+        /// </summary>
+        public void SetPathController(PathController pc)
+        {
+            pathController = pc;
+            if (pathController != null)
+                pathController.InitializePath();
         }
 
         private void Update()

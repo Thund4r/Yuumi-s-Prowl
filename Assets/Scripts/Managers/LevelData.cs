@@ -3,10 +3,9 @@ using UnityEngine;
 namespace YuumisProwl
 {
     /// <summary>
-    /// Defines the parameters for a single level.
-    /// Create assets via: Right-click in Project → Yuumi → Level Data
-    /// The path shape is defined by the SplineContainer in the scene;
-    /// different maps require different scenes.
+    /// Per-map tuning data. Assigned on a Map prefab's root component and applied
+    /// by LevelManager when the map is loaded. Create assets via:
+    /// Right-click in Project → Yuumi → Level Data
     /// </summary>
     [CreateAssetMenu(fileName = "Level", menuName = "Yuumi/Level Data")]
     public class LevelData : ScriptableObject
@@ -24,11 +23,5 @@ namespace YuumisProwl
         [Header("Difficulty")]
         [Tooltip("Speed at which the ball chain moves along the path.")]
         public float ballSpeed = 2f;
-
-        [Header("Scene Transition")]
-        [Tooltip("Exact name of the scene to load when this level is won. Leave empty for no transition (final level).")]
-        public string nextSceneName = "";
-        [Tooltip("Exact name of the scene to reload when this level is lost. Leave empty to reload the current scene.")]
-        public string retrySceneName = "";
     }
 }
