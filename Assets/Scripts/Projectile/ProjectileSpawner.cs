@@ -241,34 +241,6 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// Spawns a projectile from the pool.
-        /// </summary>
-        private void SpawnProjectile()
-        {
-            Projectile projectile = projectilePool.Get();
-
-            if (projectile == null)
-            {
-                Debug.LogWarning("Failed to get projectile from pool!");
-                return;
-            }
-
-            // Position at spawn point
-            projectile.transform.position = spawnPoint.position;
-            projectile.transform.rotation = spawnPoint.rotation;
-
-            // Initialize with color and chain manager reference
-            BallColor color = randomColors ? nextColor : fixedColor;
-            projectile.Initialize(color, ballChainManager, this, matchProcessor);
-            projectile.OnGetFromPool();
-
-            // Get next color for the following projectile
-            nextColor = GetNextColor();
-
-            Debug.Log($"Spawned projectile - Color: {color}");
-        }
-
-        /// <summary>
         /// Gets the next color for projectiles.
         /// </summary>
         private BallColor GetNextColor()
@@ -297,25 +269,6 @@ namespace YuumisProwl.Projectile
                 projectileInFlight = false;
                 SpawnNextProjectile();
             }
-        }
-
-        /// <summary>
-        /// Sets the number of different colors to use.
-        /// </summary>
-        public void SetColorCount(int count)
-        {
-            if (ballSpawner != null)
-            {
-                ballSpawner.SetColorCount(count);
-            }
-        }
-
-        /// <summary>
-        /// Sets the spawn cooldown time.
-        /// </summary>
-        public void SetCooldown(float cooldown)
-        {
-            spawnCooldown = Mathf.Max(0f, cooldown);
         }
 
         private void OnDestroy()

@@ -59,6 +59,12 @@ namespace YuumisProwl.BallChain
         /// Parameters: cascadeCount (0 = no cascades), lastGapGlobalIndex (-1 if chain cleared).
         /// </summary>
         public System.Action<int, int> OnMatchSequenceComplete;
+        /// <summary>
+        /// Fired immediately before RemoveBalls so listeners can capture each destroyed
+        /// ball's world position. Parameters: positions, match color, cascadeIndex
+        /// (0 = initial match in the sequence, 1+ = cascade). Gated by enableDestructionEffects.
+        /// </summary>
+        public System.Action<List<Vector3>, BallColor, int> OnMatchVisual;
 
         private void Start()
         {
@@ -133,6 +139,8 @@ namespace YuumisProwl.BallChain
                 BallColor matchedColor = matched[0].ball.BallColor;
                 int destroyedCount = matched.Count;
 
+                FireMatchVisual(matched, matchedColor, existingSeq.matchCount);
+
                 ballChainManager.RemoveBalls(matched);
                 existingSeq.matchCount++;
                 existingSeq.lastGapGlobalIndex = gapGlobalBeforeRemoval;
@@ -180,6 +188,8 @@ namespace YuumisProwl.BallChain
             int gapGlobal = matched[0].chainIndex;
             BallColor color = matched[0].ball.BallColor;
             int count = matched.Count;
+
+            FireMatchVisual(matched, color, seq.matchCount);
 
             ballChainManager.RemoveBalls(matched);
             seq.matchCount++;
@@ -237,6 +247,8 @@ namespace YuumisProwl.BallChain
                     atLead = firstLocal == 0;
                     atTail = lastLocal == matchedSeg.Count - 1;
                 }
+
+                FireMatchVisual(matchedBalls, matchedColor, sequenceState.matchCount);
 
                 int segCountBefore = ballChainManager.GetSegments().Count;
                 ballChainManager.RemoveBalls(matchedBalls);
@@ -478,6 +490,20 @@ namespace YuumisProwl.BallChain
         // --------------------------------------------------------------
         // Helpers
         // --------------------------------------------------------------
+
+        private void FireMatchVisual(List<BallNode> matched, BallColor color, int cascadeIndex)
+        {
+            if (!enableDestructionEffects || OnMatchVisual == null) return;
+
+            var positions = new List<Vector3>(matched.Count);
+            for (int i = 0; i < matched.Count; i++)
+            {
+                if (matched[i].ball != null)
+                    positions.Add(matched[i].ball.transform.position);
+            }
+            if (positions.Count > 0)
+                OnMatchVisual.Invoke(positions, color, cascadeIndex);
+        }
 
         private ChainSegment FindSegmentById(int id)
         {

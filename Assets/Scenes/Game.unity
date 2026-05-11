@@ -2046,6 +2046,56 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1334092166}
   m_CullTransparentMesh: 1
+--- !u!1 &1350675959
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1350675961}
+  - component: {fileID: 1350675960}
+  m_Layer: 0
+  m_Name: MatchEffectPlayer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1350675960
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1350675959}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d25364cb073514842b0f56740d0ecd06, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  matchProcessor: {fileID: 1842243460}
+  destructionEffectPrefab: {fileID: 4915821986016230369, guid: 3ffcaf4694166cf448ac494d0dfdaae7, type: 3}
+  comboPopupPrefab: {fileID: 3140870359316456619, guid: a856eaa7f9a76d345ba77254ff67bdc6, type: 3}
+  initialEffectPoolSize: 16
+  initialPopupPoolSize: 4
+  comboLabelMinCascade: 1
+--- !u!4 &1350675961
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1350675959}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1361801870
 GameObject:
   m_ObjectHideFlags: 0
@@ -2991,6 +3041,7 @@ SceneRoots:
   - {fileID: 1842243457}
   - {fileID: 742150878}
   - {fileID: 1971118543}
+  - {fileID: 1350675961}
   - {fileID: 776678608}
   - {fileID: 1892057642}
   - {fileID: 245060598}

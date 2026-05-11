@@ -45,8 +45,6 @@ namespace YuumisProwl.Managers
 
             matchProcessor.OnChainCleared += HandleChainCleared;
             ballChainManager.OnBallReachedEnd += HandleBallReachedEnd;
-
-            InitializeGame();
         }
 
         private void Update()
@@ -128,16 +126,5 @@ namespace YuumisProwl.Managers
             Debug.Log("=== GAME OVER ===");
         }
 
-        /// <summary>
-        /// Full restart: clears the chain, resets the spawner, and re-initialises state.
-        /// </summary>
-        public void RestartGame()
-        {
-            if (ballChainManager != null)
-                ballChainManager.ClearChain();
-            if (ballSpawner != null)
-                ballSpawner.StartLevel();
-            InitializeGame();
-        }
     }
 }
