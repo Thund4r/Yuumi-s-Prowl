@@ -44,6 +44,7 @@ namespace YuumisProwl.Projectile
         private PowerUpType equippedPowerUp = PowerUpType.None;
         private float pierceMaxDistance;
         private float pierceSpeedMultiplier = 1f;
+        private float pierceWidthMultiplier = 1f;
         private float distanceTraveled;
         private int pierceDestroyCount;
         private float bombRadius;
@@ -124,13 +125,14 @@ namespace YuumisProwl.Projectile
         /// <summary>
         /// Equips a power-up on this projectile. Call after Initialize, before Launch.
         /// For Pierce, pierceDistance caps how far the projectile travels before despawning,
-        /// and speedMultiplier scales its flight speed.
+        /// speedMultiplier scales its flight speed, and widthMultiplier scales the cast radius.
         /// </summary>
-        public void SetPowerUp(PowerUpType type, float pierceDistance = 0f, float speedMultiplier = 1f, float bombExplosionRadius = 0f)
+        public void SetPowerUp(PowerUpType type, float pierceDistance = 0f, float speedMultiplier = 1f, float bombExplosionRadius = 0f, float widthMultiplier = 1f)
         {
             equippedPowerUp = type;
             pierceMaxDistance = pierceDistance;
             pierceSpeedMultiplier = speedMultiplier > 0f ? speedMultiplier : 1f;
+            pierceWidthMultiplier = widthMultiplier > 0f ? widthMultiplier : 1f;
             distanceTraveled = 0f;
             pierceDestroyCount = 0;
             bombRadius = bombExplosionRadius;
@@ -364,7 +366,7 @@ namespace YuumisProwl.Projectile
         {
             float angle = transform.eulerAngles.z * Mathf.Deg2Rad;
             Vector3 direction = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f);
-            float castRadius = sphereCollider != null ? sphereCollider.radius : 0.3f;
+            float castRadius = (sphereCollider != null ? sphereCollider.radius : 0.3f) * pierceWidthMultiplier;
 
             RaycastHit[] hits = Physics.SphereCastAll(
                 transform.position, castRadius, direction, pierceMaxDistance);
@@ -425,6 +427,7 @@ namespace YuumisProwl.Projectile
             equippedPowerUp = PowerUpType.None;
             pierceMaxDistance = 0f;
             pierceSpeedMultiplier = 1f;
+            pierceWidthMultiplier = 1f;
             distanceTraveled = 0f;
             pierceDestroyCount = 0;
             bombRadius = 0f;

@@ -26,8 +26,14 @@ namespace YuumisProwl.BallChain
         [SerializeField] private float ballSpacing = 0.5f;
 
         [Header("Gap Close Settings")]
-        [Tooltip("Speed at which a trailing segment catches up to the segment ahead.")]
+        [Tooltip("Initial backward speed of the front segment when a gap first opens.")]
         [SerializeField] private float gapCloseSpeed = 2f;
+        [Tooltip("Maximum backward speed the front segment can reach while a gap is open.")]
+        [SerializeField] private float gapCloseMaxSpeed = 6f;
+        [Tooltip("Acceleration applied to the front segment's backward speed while a gap is open, in units/sec^2. 0 = constant speed.")]
+        [SerializeField] private float gapCloseAcceleration = 4f;
+
+        private float currentGapCloseSpeed;
 
         [Header("Insertion Animation")]
         [Tooltip("Seconds taken for an inserted ball to ease into place (and for the chain in front of it to slide forward by one ball spacing).")]
@@ -153,10 +159,11 @@ namespace YuumisProwl.BallChain
         /// Movement is lead-driven from the front of the chain.
         /// - Single segment: the lead (ball at index 0 of the only segment) moves forward
         ///   at ballSpeed and all other balls follow at fixed spacing behind it.
-        /// - Multiple segments: only the front segment moves, and it moves *backward*
-        ///   at gapCloseSpeed. Every other segment is stationary. The chain only resumes
+        /// - Multiple segments: only the front segment moves, and it moves *backward*,
+        ///   starting at gapCloseSpeed and accelerating by gapCloseAcceleration up to
+        ///   gapCloseMaxSpeed. Every other segment is stationary. The chain only resumes
         ///   forward motion once the front segment has absorbed everything behind it
-        ///   (i.e., the chain is one segment again).
+        ///   (i.e., the chain is one segment again); the accumulated speed resets then.
         /// </summary>
         private void MoveChain(float deltaTime)
         {
@@ -174,14 +181,21 @@ namespace YuumisProwl.BallChain
 
             if (segments.Count == 1)
             {
-                // Forward motion: lead drives, everything follows at spacing.
+                // Single segment: forward motion. Reset gap-close acceleration so the
+                // next gap starts from the base speed instead of inheriting the prior ramp.
+                currentGapCloseSpeed = gapCloseSpeed;
+
                 float forwardStep = ballSpeed * deltaTime / pathLength;
                 lead.pathProgress += forwardStep;
             }
             else
             {
-                // Multi-segment: only the front moves, and it moves backward.
-                float gapCloseStep = gapCloseSpeed * deltaTime / pathLength;
+                // Multi-segment: only the front moves, and it moves backward at an
+                // accelerating speed clamped to gapCloseMaxSpeed.
+                currentGapCloseSpeed = Mathf.Min(
+                    currentGapCloseSpeed + gapCloseAcceleration * deltaTime,
+                    gapCloseMaxSpeed);
+                float gapCloseStep = currentGapCloseSpeed * deltaTime / pathLength;
                 lead.pathProgress -= gapCloseStep;
             }
 

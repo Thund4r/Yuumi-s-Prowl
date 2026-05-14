@@ -1,6 +1,7 @@
 using UnityEngine;
 using YuumisProwl;
 using YuumisProwl.BallChain;
+using YuumisProwl.Progression;
 
 namespace YuumisProwl.PowerUps
 {
@@ -25,6 +26,8 @@ namespace YuumisProwl.PowerUps
 
         [Header("Settings")]
         [SerializeField] private PowerUpSettings settings;
+        [Tooltip("Per-run mutable stats. When assigned, overrides hammer recoil distance.")]
+        [SerializeField] private RuntimeStats runtimeStats;
 
         private float nextRollTime;
 
@@ -114,7 +117,9 @@ namespace YuumisProwl.PowerUps
                 insertAfterIndex = Random.Range(minIndex, maxIndex + 1);
             }
 
-            float recoil = settings != null ? settings.hammerRecoilDistance : 3f;
+            float recoil = runtimeStats != null ? runtimeStats.HammerRecoilDistance
+                         : settings != null ? settings.hammerRecoilDistance
+                         : 3f;
             ballChainManager.SpawnHammerBall(insertAfterIndex, recoil);
         }
     }

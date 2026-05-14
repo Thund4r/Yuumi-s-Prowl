@@ -1,4 +1,5 @@
 using UnityEngine;
+using YuumisProwl.Progression;
 using YuumisProwl.Projectile;
 
 namespace YuumisProwl.Player
@@ -21,10 +22,15 @@ namespace YuumisProwl.Player
         [SerializeField] private Animator animator;
 
         [Header("Rotation")]
-        [Tooltip("How fast Yuumi tracks the cursor, in degrees per second. 0 = instant snap.")]
+        [Tooltip("How fast Yuumi tracks the cursor, in degrees per second. 0 = instant snap. " +
+                 "Used as a fallback if RuntimeStats is not wired.")]
         [SerializeField] private float rotationSpeed = 720f;
         [Tooltip("Angle offset applied after aiming. Adjust to match your sprite's orientation.")]
         [SerializeField] private float rotationOffset = 0f;
+
+        [Header("Progression")]
+        [Tooltip("Per-run mutable stats. When assigned, YuumiRotationSpeed overrides the value above.")]
+        [SerializeField] private RuntimeStats runtimeStats;
 
         [Header("Animation")]
         [Tooltip("The Animator trigger parameter name for the throw animation.")]
@@ -72,15 +78,16 @@ namespace YuumisProwl.Player
             if (direction.sqrMagnitude < 0.001f) return;
 
             float targetAngle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg + rotationOffset;
+            float effectiveSpeed = runtimeStats != null ? runtimeStats.YuumiRotationSpeed : rotationSpeed;
 
-            if (rotationSpeed <= 0f)
+            if (effectiveSpeed <= 0f)
             {
                 transform.rotation = Quaternion.Euler(0f, 0f, targetAngle);
             }
             else
             {
                 float currentAngle = transform.eulerAngles.z;
-                float newAngle = Mathf.MoveTowardsAngle(currentAngle, targetAngle, rotationSpeed * Time.deltaTime);
+                float newAngle = Mathf.MoveTowardsAngle(currentAngle, targetAngle, effectiveSpeed * Time.deltaTime);
                 transform.rotation = Quaternion.Euler(0f, 0f, newAngle);
             }
         }

@@ -1,6 +1,7 @@
 using UnityEngine;
 using YuumisProwl;
 using YuumisProwl.BallChain;
+using YuumisProwl.Progression;
 
 namespace YuumisProwl.PowerUps
 {
@@ -19,11 +20,15 @@ namespace YuumisProwl.PowerUps
         [SerializeField] private MatchProcessor matchProcessor;
         [SerializeField] private PowerUpInventory inventory;
         [SerializeField] private PowerUpSettings settings;
+        [Tooltip("Per-run mutable stats. When assigned, overrides the matching settings values.")]
+        [SerializeField] private RuntimeStats runtimeStats;
 
         private int currentCharge;
 
         public int CurrentCharge => currentCharge;
-        public int ChargeThreshold => settings != null ? settings.chargeThreshold : 10;
+        public int ChargeThreshold => runtimeStats != null ? runtimeStats.ChargeThreshold
+                                    : settings != null ? settings.chargeThreshold
+                                    : 10;
 
         /// <summary>Fires (currentCharge, threshold) whenever charge changes. For UI meters.</summary>
         public System.Action<int, int> OnChargeChanged;
@@ -55,15 +60,21 @@ namespace YuumisProwl.PowerUps
 
         private void HandleBallsDestroyed(int count, BallColor color)
         {
-            if (settings == null) return;
-            AddCharge(count * settings.chargePerBallDestroyed);
+            int perBall = runtimeStats != null ? runtimeStats.ChargePerBallDestroyed
+                        : settings != null ? settings.chargePerBallDestroyed
+                        : 0;
+            if (perBall <= 0) return;
+            AddCharge(count * perBall);
         }
 
         private void HandleSequenceComplete(int cascadeCount, int lastGapIndex)
         {
-            if (settings == null) return;
-            if (cascadeCount > 0)
-                AddCharge(cascadeCount * settings.cascadeBonusCharge);
+            if (cascadeCount <= 0) return;
+            int bonus = runtimeStats != null ? runtimeStats.CascadeBonusCharge
+                      : settings != null ? settings.cascadeBonusCharge
+                      : 0;
+            if (bonus <= 0) return;
+            AddCharge(cascadeCount * bonus);
         }
 
         private void AddCharge(int amount)

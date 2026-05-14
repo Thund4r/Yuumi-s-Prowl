@@ -4,6 +4,7 @@ using YuumisProwl;
 using YuumisProwl.BallChain;
 using YuumisProwl.Managers;
 using YuumisProwl.PowerUps;
+using YuumisProwl.Progression;
 using YuumisProwl.Utilities;
 
 namespace YuumisProwl.Projectile
@@ -25,6 +26,8 @@ namespace YuumisProwl.Projectile
         [Header("Power-Ups")]
         [SerializeField] private PowerUpInventory powerUpInventory;
         [SerializeField] private PowerUpSettings powerUpSettings;
+        [Tooltip("Per-run mutable stats. When assigned, overrides pierce/bomb tunables.")]
+        [SerializeField] private RuntimeStats runtimeStats;
 
         [Header("Spawn Settings")]
         [SerializeField] private float spawnCooldown = 0.5f;
@@ -98,10 +101,17 @@ namespace YuumisProwl.Projectile
             if (powerUpInventory == null) { projectile.SetPowerUp(PowerUpType.None); return; }
 
             PowerUpType type = powerUpInventory.EquippedPowerUp;
-            float pierceDist = powerUpSettings != null ? powerUpSettings.pierceMaxDistance : 30f;
-            float speedMult = powerUpSettings != null ? powerUpSettings.pierceSpeedMultiplier : 2f;
-            float bombRad = powerUpSettings != null ? powerUpSettings.bombRadius : 3f;
-            projectile.SetPowerUp(type, pierceDist, speedMult, bombRad);
+            float pierceDist = runtimeStats != null ? runtimeStats.PierceMaxDistance
+                             : powerUpSettings != null ? powerUpSettings.pierceMaxDistance
+                             : 30f;
+            float speedMult = runtimeStats != null ? runtimeStats.PierceSpeedMultiplier
+                            : powerUpSettings != null ? powerUpSettings.pierceSpeedMultiplier
+                            : 2f;
+            float bombRad = runtimeStats != null ? runtimeStats.BombRadius
+                          : powerUpSettings != null ? powerUpSettings.bombRadius
+                          : 3f;
+            float pierceWidth = runtimeStats != null ? runtimeStats.PierceWidthMultiplier : 1f;
+            projectile.SetPowerUp(type, pierceDist, speedMult, bombRad, pierceWidth);
         }
 
         private void Update()

@@ -5,13 +5,11 @@ using YuumisProwl.BallChain;
 namespace YuumisProwl.Managers
 {
     /// <summary>
-    /// Loads map prefabs into the active scene. Each map prefab carries its own
-    /// PathController (with SplineContainer), obstacles, decorations, and LevelData.
-    /// LevelManager instantiates a map, wires its PathController into the persistent
-    /// BallChainManager, applies the map's LevelData, and triggers BallSpawner.
+    /// Loads map prefabs on demand. After the progression refactor, LevelManager is a
+    /// pure loader: a caller (typically RunManager) passes a Map prefab to LoadMap()
+    /// and LevelManager handles the teardown → pause → instantiate → bind → start cycle.
     ///
-    /// On win:  advance to the next map (or loop / stop on final).
-    /// On lose: re-instantiate the current map.
+    /// Win/lose handling and "which map is next" live in RunManager, not here.
     /// </summary>
     public class LevelManager : MonoBehaviour
     {
@@ -21,15 +19,11 @@ namespace YuumisProwl.Managers
         [SerializeField] private GameManager gameManager;
 
         [Header("Maps")]
-        [Tooltip("Map prefabs played in order. Each prefab's root must have a Map component.")]
-        [SerializeField] private Map[] mapPrefabs;
         [Tooltip("Where instantiated maps are parented. Leave null to parent to this transform.")]
         [SerializeField] private Transform mapRoot;
-        [Tooltip("If true, after the final map is won the loader wraps back to map 0.")]
-        [SerializeField] private bool loopMaps = true;
 
         [Header("Transition")]
-        [Tooltip("Seconds between a map ending and the next/retry map loading.")]
+        [Tooltip("Seconds between teardown of the old map and instantiation of the new one.")]
         [SerializeField] private float pauseBetweenMaps = 0.5f;
 
         public bool IsTransitioning { get; private set; }
@@ -37,46 +31,38 @@ namespace YuumisProwl.Managers
         public LevelData CurrentLevel => currentMapInstance != null ? currentMapInstance.LevelData : null;
 
         private Map currentMapInstance;
-        private int currentMapIndex = 0;
+        private Coroutine loadRoutine;
 
         private void Awake()
         {
             if (mapRoot == null) mapRoot = transform;
         }
 
-        private void Start()
+        /// <summary>
+        /// Loads the given map prefab: tears down the current map, pauses briefly,
+        /// instantiates the new one, binds its PathController and LevelData into the
+        /// persistent systems, and starts the level.
+        /// </summary>
+        public void LoadMap(Map prefab)
         {
-            if (gameManager == null)
+            if (prefab == null)
             {
-                Debug.LogError("LevelManager: GameManager not assigned!");
+                Debug.LogError("LevelManager.LoadMap: prefab is null.");
                 return;
             }
 
-            gameManager.OnGameWon  += HandleLevelWon;
-            gameManager.OnGameLost += HandleLevelLost;
-
-            if (mapPrefabs == null || mapPrefabs.Length == 0)
-            {
-                Debug.LogError("LevelManager: No map prefabs assigned!");
-                return;
-            }
-
-            LoadMap(0);
+            if (loadRoutine != null) StopCoroutine(loadRoutine);
+            loadRoutine = StartCoroutine(LoadMapRoutine(prefab));
         }
 
-        private void OnDestroy()
+        private IEnumerator LoadMapRoutine(Map prefab)
         {
-            if (gameManager != null)
-            {
-                gameManager.OnGameWon  -= HandleLevelWon;
-                gameManager.OnGameLost -= HandleLevelLost;
-            }
-        }
+            IsTransitioning = true;
 
-        private void LoadMap(int index)
-        {
-            if (mapPrefabs == null || mapPrefabs.Length == 0) return;
-            index = Mathf.Clamp(index, 0, mapPrefabs.Length - 1);
+            if (ballChainManager != null)
+                ballChainManager.SetMoving(false);
+
+            yield return new WaitForSeconds(pauseBetweenMaps);
 
             if (currentMapInstance != null)
             {
@@ -87,8 +73,7 @@ namespace YuumisProwl.Managers
             if (ballChainManager != null)
                 ballChainManager.ClearChain();
 
-            currentMapIndex = index;
-            currentMapInstance = Instantiate(mapPrefabs[index], mapRoot);
+            currentMapInstance = Instantiate(prefab, mapRoot);
 
             if (ballChainManager != null)
                 ballChainManager.SetPathController(currentMapInstance.PathController);
@@ -116,55 +101,7 @@ namespace YuumisProwl.Managers
                 ballSpawner.StartLevel();
 
             IsTransitioning = false;
-        }
-
-        private void HandleLevelWon()
-        {
-            StartCoroutine(AdvanceAfterPause());
-        }
-
-        private IEnumerator AdvanceAfterPause()
-        {
-            IsTransitioning = true;
-
-            if (ballChainManager != null)
-                ballChainManager.SetMoving(false);
-
-            yield return new WaitForSeconds(pauseBetweenMaps);
-
-            int next = currentMapIndex + 1;
-            if (next >= mapPrefabs.Length)
-            {
-                if (loopMaps)
-                {
-                    next = 0;
-                }
-                else
-                {
-                    Debug.Log("LevelManager: All maps complete.");
-                    IsTransitioning = false;
-                    yield break;
-                }
-            }
-
-            LoadMap(next);
-        }
-
-        private void HandleLevelLost()
-        {
-            StartCoroutine(RetryAfterPause());
-        }
-
-        private IEnumerator RetryAfterPause()
-        {
-            IsTransitioning = true;
-
-            if (ballChainManager != null)
-                ballChainManager.SetMoving(false);
-
-            yield return new WaitForSeconds(pauseBetweenMaps);
-
-            LoadMap(currentMapIndex);
+            loadRoutine = null;
         }
     }
 }

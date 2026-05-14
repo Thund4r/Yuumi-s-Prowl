@@ -859,10 +859,7 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   ballSpawner: {fileID: 1842243455}
   gameManager: {fileID: 1842243459}
-  mapPrefabs:
-  - {fileID: 3040890633578842797, guid: 7d892c9ae710aef42a30dca5a3465926, type: 3}
   mapRoot: {fileID: 608129041}
-  loopMaps: 1
   pauseBetweenMaps: 0.5
 --- !u!4 &742150878
 Transform:
@@ -1892,6 +1889,56 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1233749322}
   m_CullTransparentMesh: 1
+--- !u!1 &1295330459
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1295330461}
+  - component: {fileID: 1295330460}
+  m_Layer: 0
+  m_Name: RunManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1295330460
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1295330459}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bad8c19d4d44104997e0813ce134086, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  config: {fileID: 11400000, guid: bc61c204cd8c7214489173924d89f312, type: 2}
+  levelManager: {fileID: 742150877}
+  gameManager: {fileID: 1842243459}
+  runtimeStats: {fileID: 1304393702}
+  mainMenuScene: Main Menu
+  pauseBeforeReturn: 1.5
+--- !u!4 &1295330461
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1295330459}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 3.274842, y: 2.7588542, z: 0.14796568}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1298458307
 GameObject:
   m_ObjectHideFlags: 0
@@ -1967,6 +2014,61 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
+--- !u!1 &1304393701
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1304393703}
+  - component: {fileID: 1304393702}
+  m_Layer: 0
+  m_Name: RuntimeStats
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1304393702
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1304393701}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6551e913c1e4e4a438cd3a24cc2ed3fc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  defaults: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
+  yuumiRotationSpeedDefault: 720
+  YuumiRotationSpeed: 0
+  ChargePerBallDestroyed: 0
+  CascadeBonusCharge: 0
+  ChargeThreshold: 0
+  PierceMaxDistance: 0
+  PierceSpeedMultiplier: 0
+  PierceWidthMultiplier: 0
+  BombRadius: 0
+  HammerRecoilDistance: 0
+--- !u!4 &1304393703
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1304393701}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 3.274842, y: 2.7588542, z: 0.14796568}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1334092166
 GameObject:
   m_ObjectHideFlags: 0
@@ -2662,6 +2764,8 @@ MonoBehaviour:
   ballSpeed: 0.5
   ballSpacing: 0.5
   gapCloseSpeed: 2
+  gapCloseMaxSpeed: 6
+  gapCloseAcceleration: 4
   insertionDuration: 0.15
   initialPoolSize: 50
   holeProgress: 0
@@ -2700,6 +2804,7 @@ MonoBehaviour:
   levelManager: {fileID: 742150877}
   powerUpInventory: {fileID: 1971118541}
   powerUpSettings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
+  runtimeStats: {fileID: 0}
   spawnCooldown: 0.5
   initialPoolSize: 20
   randomColors: 1
@@ -2752,7 +2857,6 @@ GameObject:
   - component: {fileID: 1892057640}
   - component: {fileID: 1892057639}
   - component: {fileID: 1892057638}
-  - component: {fileID: 1892057637}
   m_Layer: 0
   m_Name: Yuumi
   m_TagString: Untagged
@@ -2760,27 +2864,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!95 &1892057637
-Animator:
-  serializedVersion: 5
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1892057636}
-  m_Enabled: 1
-  m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 3385e1f8c98bac74aae1e792664c2d9b, type: 2}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_StabilizeFeet: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorStateOnDisable: 0
-  m_WriteDefaultValuesOnDisable: 0
 --- !u!114 &1892057638
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2794,9 +2877,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   projectileSpawner: {fileID: 1842243458}
-  animator: {fileID: 1892057637}
+  animator: {fileID: 0}
   rotationSpeed: 360
   rotationOffset: 90
+  runtimeStats: {fileID: 1304393702}
   throwTrigger: Throw
 --- !u!136 &1892057639
 CapsuleCollider:
@@ -2933,6 +3017,7 @@ MonoBehaviour:
   matchProcessor: {fileID: 1842243460}
   inventory: {fileID: 1971118541}
   settings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
+  runtimeStats: {fileID: 1304393702}
 --- !u!4 &1971118543
 Transform:
   m_ObjectHideFlags: 0
@@ -2964,6 +3049,7 @@ MonoBehaviour:
   matchProcessor: {fileID: 1842243460}
   ballSpawner: {fileID: 1842243455}
   settings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
+  runtimeStats: {fileID: 1304393702}
 --- !u!1 &2059051850
 GameObject:
   m_ObjectHideFlags: 0
@@ -3039,6 +3125,7 @@ SceneRoots:
   - {fileID: 1068833481}
   - {fileID: 1361801872}
   - {fileID: 1842243457}
+  - {fileID: 1304393703}
   - {fileID: 742150878}
   - {fileID: 1971118543}
   - {fileID: 1350675961}
@@ -3047,3 +3134,4 @@ SceneRoots:
   - {fileID: 245060598}
   - {fileID: 2059051853}
   - {fileID: 608129041}
+  - {fileID: 1295330461}
