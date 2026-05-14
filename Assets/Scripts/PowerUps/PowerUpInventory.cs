@@ -49,13 +49,14 @@ namespace YuumisProwl.PowerUps
             if (Input.GetKeyDown(KeyCode.Alpha1)) EquipSlot(0);
             if (Input.GetKeyDown(KeyCode.Alpha2)) EquipSlot(1);
             if (Input.GetKeyDown(KeyCode.Alpha3)) EquipSlot(2);
+            if (Input.GetKeyDown(KeyCode.Alpha4)) EquipSlot(3);
             if (Input.GetKeyDown(KeyCode.Alpha0)) UnequipPowerUp();
 
-            // Debug: press P to manually grant a Pierce
+            // Debug: press P to manually grant a Bomb
             if (Input.GetKeyDown(KeyCode.P))
             {
-                AddPowerUp(PowerUpType.Pierce);
-                Debug.Log("PowerUpInventory: Debug Pierce granted.");
+                AddPowerUp(PowerUpType.Bomb);
+                Debug.Log("PowerUpInventory: Debug Bomb granted.");
             }
             #endif
         }

@@ -22,6 +22,7 @@ namespace YuumisProwl.Projectile
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private BallSpawner ballSpawner;
         [SerializeField] private LevelManager levelManager;
+        [SerializeField] private GameManager gameManager;
 
         [Header("Power-Ups")]
         [SerializeField] private PowerUpInventory powerUpInventory;
@@ -46,6 +47,7 @@ namespace YuumisProwl.Projectile
         private float lastSpawnTime;
         private BallColor nextColor;
         private Projectile currentProjectile;
+        private Projectile inFlightProjectile;
         private bool projectileInFlight = false;
 
         private void Awake()
@@ -80,6 +82,12 @@ namespace YuumisProwl.Projectile
 
             if (powerUpInventory != null)
                 powerUpInventory.OnPowerUpEquipped += HandlePowerUpEquipped;
+
+            if (gameManager != null)
+            {
+                gameManager.OnGameWon  += HandleLevelEnded;
+                gameManager.OnGameLost += HandleLevelEnded;
+            }
 
             // Initialize next color
             nextColor = GetNextColor();
@@ -224,6 +232,7 @@ namespace YuumisProwl.Projectile
             if (currentProjectile == launched)
             {
                 projectileInFlight = true;
+                inFlightProjectile = launched;
                 currentProjectile = null;
             }
 
@@ -275,16 +284,54 @@ namespace YuumisProwl.Projectile
                 projectilePool.Return(projectile);
                 projectile.OnReturnToPool();
 
+                if (projectile == inFlightProjectile) inFlightProjectile = null;
+
                 // Mark that the projectile is no longer in flight and prepare the next one
                 projectileInFlight = false;
                 SpawnNextProjectile();
             }
         }
 
+        /// <summary>
+        /// Forces any in-flight or loaded projectile back to the pool and loads a fresh one.
+        /// Called on GameManager.OnGameWon / OnGameLost so a shot launched right before a
+        /// level ends can't carry over and insert into the next level's chain mid-intro.
+        /// </summary>
+        public void ClearActiveProjectiles()
+        {
+            if (inFlightProjectile != null)
+            {
+                projectilePool.Return(inFlightProjectile);
+                inFlightProjectile.OnReturnToPool();
+                inFlightProjectile = null;
+            }
+            projectileInFlight = false;
+
+            if (currentProjectile != null)
+            {
+                projectilePool.Return(currentProjectile);
+                currentProjectile.OnReturnToPool();
+                currentProjectile = null;
+            }
+
+            SpawnNextProjectile();
+        }
+
+        private void HandleLevelEnded()
+        {
+            ClearActiveProjectiles();
+        }
+
         private void OnDestroy()
         {
             if (powerUpInventory != null)
                 powerUpInventory.OnPowerUpEquipped -= HandlePowerUpEquipped;
+
+            if (gameManager != null)
+            {
+                gameManager.OnGameWon  -= HandleLevelEnded;
+                gameManager.OnGameLost -= HandleLevelEnded;
+            }
 
             if (projectilePool != null)
             {

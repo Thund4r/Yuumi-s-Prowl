@@ -9,38 +9,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 405686821af25aa4a96259120c5713f9, type: 3}
-  m_Name: RunConfig
+  m_Script: {fileID: 11500000, guid: f4f1c70f169a72844ba0b63d25fb53d7, type: 3}
+  m_Name: MetaProgressionSettings
   m_EditorClassIdentifier: 
-  mapPool:
-  - {fileID: 3040890633578842797, guid: 7d892c9ae710aef42a30dca5a3465926, type: 3}
-  mapCount: 2
-  allowDuplicates: 1
-  ballSpeedCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1.0019124
-      value: 2.0005202
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  totalBallsCurve:
+  baseEssencePerFloor: 10
+  essenceDepthCurve:
     serializedVersion: 2
     m_Curve:
     - serializedVersion: 3
@@ -64,3 +37,6 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+  essenceDifficultyScaling: 1
+  chargePerBallMetaCap: 10
+  essenceGainCapMultiplier: 2

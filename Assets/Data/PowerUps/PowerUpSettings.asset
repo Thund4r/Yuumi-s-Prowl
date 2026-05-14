@@ -19,7 +19,7 @@ MonoBehaviour:
   chargePerBallDestroyed: 1
   cascadeBonusCharge: 3
   chargeThreshold: 30
-  maxPowerUpSlots: 3
+  maxPowerUpSlots: 4
   pierceMaxDistance: 30
   pierceSpeedMultiplier: 2
   bombRadius: 2

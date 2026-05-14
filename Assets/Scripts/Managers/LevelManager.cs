@@ -42,8 +42,11 @@ namespace YuumisProwl.Managers
         /// Loads the given map prefab: tears down the current map, pauses briefly,
         /// instantiates the new one, binds its PathController and LevelData into the
         /// persistent systems, and starts the level.
+        ///
+        /// Optional multipliers scale the map's baseline LevelData values for this load.
+        /// colorCount is intentionally not scaled (reserved for color-synergy upgrades).
         /// </summary>
-        public void LoadMap(Map prefab)
+        public void LoadMap(Map prefab, float ballSpeedMult = 1f, float totalBallsMult = 1f)
         {
             if (prefab == null)
             {
@@ -52,10 +55,10 @@ namespace YuumisProwl.Managers
             }
 
             if (loadRoutine != null) StopCoroutine(loadRoutine);
-            loadRoutine = StartCoroutine(LoadMapRoutine(prefab));
+            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, totalBallsMult));
         }
 
-        private IEnumerator LoadMapRoutine(Map prefab)
+        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, float totalBallsMult)
         {
             IsTransitioning = true;
 
@@ -81,13 +84,16 @@ namespace YuumisProwl.Managers
             LevelData data = currentMapInstance.LevelData;
             if (data != null)
             {
+                float effectiveSpeed = data.ballSpeed * ballSpeedMult;
+                int effectiveTotalBalls = Mathf.Max(1, Mathf.RoundToInt(data.totalBalls * totalBallsMult));
+
                 if (ballChainManager != null)
-                    ballChainManager.SetSpeed(data.ballSpeed);
+                    ballChainManager.SetSpeed(effectiveSpeed);
 
                 if (ballSpawner != null)
                 {
                     ballSpawner.SetColorCount(data.colorCount);
-                    ballSpawner.SetTotalBalls(data.totalBalls);
+                    ballSpawner.SetTotalBalls(effectiveTotalBalls);
                 }
             }
 

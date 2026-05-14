@@ -68,6 +68,7 @@ Single persistent `Game` scene that loads map content as prefabs. Systems commun
 | `YuumisProwl.Managers` | `GameManager`, `LevelManager`, `Map` |
 | `YuumisProwl.Player` | `YuumiController` |
 | `YuumisProwl.PowerUps` | `PowerUpType`, `PowerUpInventory`, `PowerUpChargeTracker`, `PowerUpSpawner`, `PowerUpSettings`, `PowerUpUIController`, `PowerUpIconDatabase` |
+| `YuumisProwl.Progression` | `RunManager`, `RunConfig`, `RunState`, `RunNode`, `RuntimeStats`, `UpgradeDefinition`, `UpgradeDraftUI` |
 | `YuumisProwl.VFX` | `MatchEffectPlayer`, `ComboPopup` |
 | `YuumisProwl.Utilities` | `ObjectPool<T>` |
 
@@ -141,6 +142,24 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
   - **Win 2:** `BallCount > 0` AND `!HasVisibleBalls()` AND intro not playing (all balls retreated into the hole).
   - **Lose:** `BallChainManager.OnBallReachedEnd`.
 
+### Progression & In-Run Upgrades
+- `RunManager` — orchestrates a run: generates `RunNode[]`, loads maps via `LevelManager`, listens to `GameManager.OnGameWon` to trigger draft UI, applies upgrades, and advances to the next node. On loss or final node win, ends the run, clears balls, and grants essence reward to `PlayerProfile`. Resets `RuntimeStats` at run start and applies meta upgrades from profile. Calculates essence rewards based on floors cleared, depth multiplier, difficulty multiplier, and player's meta upgrade bonuses.
+- `RunConfig` (ScriptableObject) — run authoring: `mapPool[]`, `mapCount`, `allowDuplicates`, and difficulty curves `ballSpeedCurve` / `totalBallsCurve` (sampled as multipliers based on floor progress `t`).
+- `RunState` — in-memory run state: `RunNode[]`, `currentNodeIndex`, `gold`, `appliedUpgrades[]`. Discarded at run end; meta persistence lives in `PlayerProfile`.
+- `RunNode` / `RunNodeType` — defines one step in a run: `Gameplay` (load a map) or `Shop` (stubbed for step 6).
+- `RuntimeStats` (MonoBehaviour) — mutable per-run wrapper for tunables: `YuumiRotationSpeed`, `ChargePerBallDestroyed`, `CascadeBonusCharge`, `ChargeThreshold`, `PierceMaxDistance`, `PierceSpeedMultiplier`, `PierceWidthMultiplier`, `BombRadius`, `HammerRecoilDistance`. `ResetToDefaults()` copies baselines from `PowerUpSettings`. Consumed by `YuumiController`, `PowerUpChargeTracker`, `ProjectileSpawner`, etc. with null-safe fallbacks.
+- `UpgradeDefinition` (ScriptableObject) — defines an in-run upgrade: `UpgradeStat` (enum: `YuumiRotationSpeed`, `ChargePerBall`, `PierceWidth`, `BombRadius`), `ModifierValue` (applied as multiplicative for speed/width, additive for charge/radius), `UpgradeName`, `Description`, `Icon`. `Apply(RuntimeStats)` mutates the stat. Create via **Yuumi → Upgrade Definition** context menu.
+- `UpgradeDraftUI` — displays 3 random upgrade choices after a level win (except final node). Shows icon, name, description per option. Fades in/out and fires a callback on selection so `RunManager` can apply and advance.
+- Draft flow: `GameManager.OnGameWon` → `RunManager.HandleNodeWon()` → if not last node, call `UpgradeDraftUI.Show(options, callback)` → `RunManager.HandleUpgradeSelected(upgrade)` → apply to `RuntimeStats` → `AdvanceToNextNode()` → load next map.
+
+### Meta Progression
+- `MetaProgressionSettings` (ScriptableObject) — tunable configuration for post-run rewards: `baseEssencePerFloor`, `essenceDepthCurve` (multiplier based on run depth), `essenceDifficultyScaling` (bool; if true, multiplies by ballSpeed×totalBalls), and meta upgrade caps (`chargePerBallMetaCap`, `essenceGainCapMultiplier`). Create via **Yuumi → Meta Progression Settings**.
+- `PlayerProfile` — serializable persistent player data: `essenceTotal`, `essenceSpent`, `metaUpgrades[]` (array of `MetaUpgradeState`). Currently tracks: Charge Per Ball (additive, capped) and Essence Gain (multiplicative, capped). Discarded/loaded by `PlayerProfileManager`.
+- `PlayerProfileManager` (MonoBehaviour, DontDestroyOnLoad) — singleton managing save/load. Loads profile from JSON in `persistentDataPath` on Awake. `GrantEssence(int)` credits the player and saves. `GetOrCreateMetaUpgrade(upgradeId)` initializes or returns a meta upgrade state. Flow: `RunManager.EndRun()` → `GrantEssenceReward()` (calculates based on floors, difficulty, meta bonuses) → `PlayerProfileManager.GrantEssence()` → saves to disk.
+- Meta upgrade application: `RunManager.StartNewRun()` → `ApplyMetaUpgradesToRunStats()` reads `PlayerProfileManager.Profile.metaUpgrades[]` and mutates `RuntimeStats` before the run starts. Ball Speed Reduction is applied to `ballSpeedMult` in `LoadCurrentNode`. Essence Gain multiplier is applied during essence reward calculation. Draft Reroll count is accessible via `GetDraftRerollCount()`.
+- `MetaShopUI` — displays the meta shop screen (player essence balance + 4 upgrades). Dynamically instantiates `MetaShopUpgradeCard` for each upgrade in `MetaProgressionSettings`. Fades in/out on show/hide. Wired to a button on the main menu.
+- `MetaShopUpgradeCard` — individual upgrade card showing: icon, name, description, progress bar (current rank / max ranks), cost of next rank, buy button (disabled if maxed or insufficient essence). Calls `PlayerProfileManager.PurchaseUpgrade()` on purchase.
+
 ---
 
 ## File Structure
@@ -179,6 +198,20 @@ Assets/
 │   │   └── Map.cs                     ← component placed on each map prefab
 │   ├── Player/
 │   │   └── YuumiController.cs
+│   ├── Progression/
+│   │   ├── RunManager.cs               ← orchestrates the run meta-loop
+│   │   ├── RunConfig.cs                ← run structure + difficulty curves
+│   │   ├── RunState.cs                 ← in-run mutable state
+│   │   ├── RunNode.cs                  ← defines a run step (Gameplay or Shop)
+│   │   ├── RuntimeStats.cs             ← per-run mutable stats wrapper
+│   │   ├── UpgradeDefinition.cs        ← defines an in-run upgrade
+│   │   ├── UpgradeDraftUI.cs           ← UI for selecting upgrades after wins
+│   │   ├── MetaProgressionSettings.cs  ← tuning for essence rewards + meta upgrades
+│   │   ├── MetaUpgradeConfig.cs        ← (nested in MetaProgressionSettings) defines cost, ranks, progression
+│   │   ├── PlayerProfile.cs            ← serializable persistent player data
+│   │   ├── PlayerProfileManager.cs     ← save/load + essence grant + upgrade purchase
+│   │   ├── MetaShopUI.cs               ← main meta shop screen controller
+│   │   └── MetaShopUpgradeCard.cs      ← single upgrade card with progress bar + buy button
 │   ├── PowerUps/
 │   │   ├── PowerUpChargeTracker.cs
 │   │   ├── PowerUpInventory.cs
@@ -269,13 +302,23 @@ All input handling uses `#if UNITY_EDITOR || UNITY_STANDALONE` / `#else` guards 
 3. If you don't want a particular system tinted by the match color, uncheck **Tint Particles** on that prefab (it's all-or-nothing currently — split into multiple prefabs if you need mixed behavior).
 4. Make sure `effectDuration` (on the prefab) is ≥ the longest-lived particle's lifetime but ≤ `MatchEffectPlayer.ReturnEffectAfter`'s wait (currently 1.2s).
 
+### Create an in-run upgrade
+1. Right-click in `Assets/Data/` → **Yuumi → Upgrade Definition**. Name it e.g. `Upgrade_RotationSpeed`.
+2. Set **Upgrade Name**, **Description**, optional **Icon**, and **Modifier Value**.
+   - For *multiplicative* upgrades (Speed, Width), use values like `1.2` (20% increase) or `1.5` (50% increase).
+   - For *additive* upgrades (Charge, Bomb Radius), use raw deltas like `2` or `0.5`.
+3. Set **Stat** (the enum selecting which stat to modify: `YuumiRotationSpeed`, `ChargePerBall`, `PierceWidth`, or `BombRadius`).
+4. Add the asset to **RunManager**'s **Upgrade Pool** array in the inspector (the pool to draft from each level).
+
 ---
 
 ## Not Yet Implemented
 
+- **Step 6b:** In-run shop screen and shop node placement in runs (meta shop UI is complete; in-run shop TBD).
+- **Step 7:** Color synergy infrastructure (color weights, match hooks).
+- **Step 8:** Fire-and-forget homing: projectile auto-targets nearby color matches after launch.
 - Per-map intro animations (Animator hook designed but not built — would live on each Map prefab and be played by `LevelManager.LoadMapRoutine` before `BallSpawner.StartLevel`).
 - Sound effects and music (`BallDestructionEffect` has audio support but no clips wired up).
-- Persistent score / progression tracking.
 - Settings/Options menu.
 - MainMenu Play button (currently auto-loads `Game.unity` in `Start`).
 - A unified `GameSettings` ScriptableObject for cross-level constants (destruction delay, insertion duration, ball spacing).
