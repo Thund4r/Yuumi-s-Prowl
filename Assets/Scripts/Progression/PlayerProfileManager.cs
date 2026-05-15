@@ -29,6 +29,35 @@ namespace YuumisProwl.Progression
             LoadProfile();
         }
 
+        private void Update()
+        {
+#if UNITY_EDITOR
+            // Debug: Press Shift+E to add 100 essence
+            if (Input.GetKeyDown(KeyCode.E) && Input.GetKey(KeyCode.LeftShift))
+            {
+                GrantEssence(100);
+                Debug.Log("DEBUG: Added 100 essence");
+            }
+
+            // Debug: Press Shift+R to reset all upgrades
+            if (Input.GetKeyDown(KeyCode.R) && Input.GetKey(KeyCode.LeftShift))
+            {
+                DebugResetUpgrades();
+            }
+
+            // Debug: Press Shift+M to set essence to 1000
+            if (Input.GetKeyDown(KeyCode.M) && Input.GetKey(KeyCode.LeftShift))
+            {
+                if (Profile != null)
+                {
+                    Profile.essenceTotal = 1000;
+                    SaveProfile();
+                    Debug.Log("DEBUG: Set essence to 1000");
+                }
+            }
+#endif
+        }
+
         /// <summary>
         /// Loads the player profile from disk, or creates a new one if it doesn't exist.
         /// </summary>
@@ -154,5 +183,17 @@ namespace YuumisProwl.Progression
             Debug.Log($"PlayerProfileManager: purchased {upgradeId} rank {nextRank + 1}. Essence remaining: {Profile.essenceTotal}");
             return true;
         }
+
+#if UNITY_EDITOR
+        private void DebugResetUpgrades()
+        {
+            if (Profile == null)
+                return;
+
+            Profile.metaUpgrades = new MetaUpgradeState[0];
+            SaveProfile();
+            Debug.Log("DEBUG: Reset all upgrades to unpurchased state");
+        }
+#endif
     }
 }

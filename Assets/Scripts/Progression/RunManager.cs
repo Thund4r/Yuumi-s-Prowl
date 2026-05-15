@@ -138,10 +138,15 @@ namespace YuumisProwl.Progression
         public int GetDraftRerollCount()
         {
             if (PlayerProfileManager.Profile == null || metaProgressionSettings == null)
+            {
+                Debug.Log("GetDraftRerollCount: Profile or settings null");
                 return 0;
+            }
 
+            Debug.Log($"GetDraftRerollCount: scanning {PlayerProfileManager.Profile.metaUpgrades.Length} upgrades");
             foreach (var upgrade in PlayerProfileManager.Profile.metaUpgrades)
             {
+                Debug.Log($"  upgradeId='{upgrade.upgradeId}' rank={upgrade.rank}");
                 if (upgrade.upgradeId == "DraftReroll" && upgrade.rank >= 0)
                 {
                     return upgrade.rank + 1; // rank 0 = 1 reroll, rank 1 = 2 rerolls, etc.
@@ -254,7 +259,8 @@ namespace YuumisProwl.Progression
             {
                 isAwaitingUpgradeSelection = true;
                 var options = PickRandomUpgrades(3);
-                upgradeDraftUI.Show(options, HandleUpgradeSelected);
+                int rerollCount = GetDraftRerollCount();
+                upgradeDraftUI.Show(options, HandleUpgradeSelected, rerollCount, () => PickRandomUpgrades(3));
             }
             else
             {

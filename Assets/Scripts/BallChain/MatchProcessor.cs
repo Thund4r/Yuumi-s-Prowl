@@ -361,6 +361,79 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Handles the aftermath of a Hammer power-up consumption:
+        ///   1. Recoils the back segment so the gap widens.
+        ///   2. Registers a match sequence on the front segment so that when the
+        ///      front segment closes the gap and merges, cascade detection runs at
+        ///      the merge boundary (just like a regular match).
+        ///   3. After the merge completes, applies a final "snap back" recoil to the
+        ///      merged segment for visual feedback — matching the normal match flow.
+        ///
+        /// Call this after the hammer ball has been removed from the chain.
+        /// </summary>
+        public void ProcessHammerAftermath(int hammerOriginalChainIndex, float recoilDistance)
+        {
+            StartCoroutine(HammerAftermathRoutine(hammerOriginalChainIndex, recoilDistance));
+        }
+
+        private IEnumerator HammerAftermathRoutine(int hammerOriginalChainIndex, float recoilDistance)
+        {
+            // After the hammer was removed, the chain may have split. The chain index
+            // we were given now points to the ball that was directly behind the hammer
+            // (because indices shifted up by one after the removal).
+            ChainSegment backSeg = ballChainManager.GetSegmentForChainIndex(hammerOriginalChainIndex);
+            if (backSeg == null) yield break;
+
+            // Find the segment ahead of the back segment — this is the one that will
+            // close the gap and absorb the back segment via merging.
+            var allSegs = ballChainManager.GetSegments();
+            int backIdx = allSegs.IndexOf(backSeg);
+            ChainSegment frontSeg = (backIdx > 0) ? allSegs[backIdx - 1] : null;
+
+            // If there's no front segment (hammer was at the very front), just recoil and exit.
+            if (frontSeg == null)
+            {
+                yield return StartCoroutine(ApplyChainRecoil(recoilDistance, backSeg));
+                yield break;
+            }
+
+            // Register a sequence on the front segment so OnSegmentsMergedHandler runs
+            // cascade detection when the gap closes. Count the hammer destruction as
+            // one "match" so the final recoil calculation has a non-zero base.
+            int currentSegId = frontSeg.id;
+            var sequenceState = new MatchSequenceState
+            {
+                frontSegId = currentSegId,
+                matchCount = 1,
+                lastGapGlobalIndex = hammerOriginalChainIndex,
+            };
+            sequencesById[currentSegId] = sequenceState;
+
+            // Apply the initial recoil that creates the gap to close.
+            yield return StartCoroutine(ApplyChainRecoil(recoilDistance, backSeg));
+
+            // Wait for the front segment to absorb everything behind it. During this
+            // wait, OnSegmentsMergedHandler fires for each merge and runs cascade detection
+            // automatically. If a cascade match is found, it increments matchCount.
+            yield return StartCoroutine(WaitForBackMost(currentSegId));
+
+            // Apply the final "snap back" recoil to the merged segment.
+            if (sequencesById.ContainsKey(currentSegId))
+            {
+                ChainSegment merged = FindSegmentById(currentSegId);
+                if (merged != null && !merged.IsEmpty)
+                {
+                    float finalRecoil = CalculateRecoilDistance(sequenceState.matchCount);
+                    yield return StartCoroutine(ApplyChainRecoil(finalRecoil, merged));
+                }
+
+                int cascadeCountFinal = sequenceState.matchCount - 1;
+                OnMatchSequenceComplete?.Invoke(cascadeCountFinal, sequenceState.lastGapGlobalIndex);
+                sequencesById.Remove(currentSegId);
+            }
+        }
+
+        /// <summary>
         /// Backwards-compatible recoil entry: pushes back the segment containing the given
         /// global chain index. If no index is supplied (-1), recoils every segment.
         /// </summary>

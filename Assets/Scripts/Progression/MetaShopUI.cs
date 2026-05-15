@@ -27,10 +27,14 @@ namespace YuumisProwl.Progression
             if (canvasGroup == null)
                 canvasGroup = GetComponent<CanvasGroup>();
 
+            // Immediately hide without deactivating — keeps the GameObject alive so
+            // Start() can run InitializeUpgradeCards and Awake can wire listeners.
+            canvasGroup.alpha = 0f;
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.interactable = false;
+
             if (closeButton != null)
                 closeButton.onClick.AddListener(Hide);
-
-            Hide();
         }
 
         private void Start()
@@ -56,7 +60,8 @@ namespace YuumisProwl.Progression
 
         public void Show()
         {
-            gameObject.SetActive(true);
+            canvasGroup.blocksRaycasts = true;
+            canvasGroup.interactable = true;
             RefreshDisplay();
             StartCoroutine(FadeIn());
         }
@@ -113,7 +118,8 @@ namespace YuumisProwl.Progression
                 yield return null;
             }
             canvasGroup.alpha = 0f;
-            gameObject.SetActive(false);
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.interactable = false;
         }
 
         private void OnDestroy()

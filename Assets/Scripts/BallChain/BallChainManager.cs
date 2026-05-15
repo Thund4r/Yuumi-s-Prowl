@@ -616,6 +616,15 @@ namespace YuumisProwl.BallChain
 
             BallNode newNode = new BallNode(ball, insertAt, 0);
             newNode.segmentId = seg.id;
+
+            // Visually spawn the hammer ball off to the side of the path so it slides
+            // in perpendicular to the chain (like a projectile would). The worldOffset
+            // decays to zero, so the ball drifts into its logical position smoothly.
+            Vector3 pathDir = pathController.GetDirectionOnPath(insertAt);
+            Vector3 perpendicular = new Vector3(-pathDir.y, pathDir.x, 0f).normalized;
+            float sideOffset = ballSpacing * 1.7f;
+            newNode.worldOffset = perpendicular * sideOffset;
+
             seg.balls.Insert(localAnchor, newNode);
 
             PushSegmentBallsBackward(seg, localAnchor + 1, spacingProgress);

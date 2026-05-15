@@ -13,6 +13,7 @@ namespace YuumisProwl.Progression
         [SerializeField] private TextMeshProUGUI nameText;
         [SerializeField] private TextMeshProUGUI descriptionText;
         [SerializeField] private TextMeshProUGUI levelText; // e.g. "Level 1/6"
+        [SerializeField] private TextMeshProUGUI bonusText; // e.g. "+5" or "×1.2"
         [SerializeField] private Image progressBar;
         [SerializeField] private TextMeshProUGUI costText;
         [SerializeField] private Button buyButton;
@@ -56,6 +57,42 @@ namespace YuumisProwl.Progression
 
             // Update level display
             levelText.text = $"Level {currentRank + 1}/{upgradeConfig.maxRanks}";
+
+            // Update bonus display
+            if (bonusText != null)
+            {
+                if (currentRank < 0)
+                {
+                    bonusText.text = "Not purchased";
+                }
+                else
+                {
+                    float bonusValue = metaProgressionSettings.GetUpgradeValue(upgradeConfig.upgradeId, currentRank);
+
+                    // Format based on upgrade type
+                    if (upgradeConfig.upgradeId == "EssenceGain")
+                    {
+                        // Display as multiplier (e.g. "×1.2")
+                        bonusText.text = $"×{bonusValue:F2}";
+                    }
+                    else if (upgradeConfig.upgradeId == "BallSpeedReduction")
+                    {
+                        // Display as negative/reduction (e.g. "-10%")
+                        bonusText.text = $"{-bonusValue * 100:F1}%";
+                    }
+                    else if (upgradeConfig.upgradeId == "DraftReroll")
+                    {
+                        // Display as count (e.g. "1 reroll")
+                        int rerollCount = currentRank + 1;
+                        bonusText.text = $"{rerollCount} reroll{(rerollCount > 1 ? "s" : "")}";
+                    }
+                    else
+                    {
+                        // Additive bonus (e.g. "+5")
+                        bonusText.text = $"+{bonusValue:F2}";
+                    }
+                }
+            }
 
             // Update progress bar
             float progress = (currentRank + 1) / (float)upgradeConfig.maxRanks;

@@ -9,6 +9,7 @@ namespace YuumisProwl.Progression
     /// <summary>
     /// Displays the upgrade draft screen after a level win.
     /// Shows 3 random upgrade options; player picks one to proceed to the next level.
+    /// Supports reroll if the player has draft reroll meta upgrades.
     /// </summary>
     public class UpgradeDraftUI : MonoBehaviour
     {
@@ -18,10 +19,16 @@ namespace YuumisProwl.Progression
         [SerializeField] private TextMeshProUGUI[] optionNames = new TextMeshProUGUI[3];
         [SerializeField] private TextMeshProUGUI[] optionDescriptions = new TextMeshProUGUI[3];
 
+        [Header("Reroll")]
+        [SerializeField] private Button rerollButton;
+        [SerializeField] private TextMeshProUGUI rerollCountText;
+
         [SerializeField] private float fadeDuration = 0.3f;
 
         private UpgradeDefinition[] currentOptions = new UpgradeDefinition[3];
         private Action<UpgradeDefinition> onUpgradeSelected;
+        private Func<UpgradeDefinition[]> onRerollRequested;
+        private int rerollsRemaining = 0;
         private bool isWaitingForSelection = false;
 
         private void Awake()
@@ -29,20 +36,29 @@ namespace YuumisProwl.Progression
             if (canvasGroup == null)
                 canvasGroup = GetComponent<CanvasGroup>();
 
+            // Immediately hide without deactivating — keeps the GameObject alive so
+            // Awake can finish wiring listeners, but ensures the panel doesn't render.
+            canvasGroup.alpha = 0f;
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.interactable = false;
+
             for (int i = 0; i < optionButtons.Length; i++)
             {
                 int index = i;
                 optionButtons[i].onClick.AddListener(() => SelectUpgrade(index));
             }
 
-            Hide();
+            if (rerollButton != null)
+                rerollButton.onClick.AddListener(OnRerollClicked);
         }
 
         /// <summary>
         /// Displays the draft screen with the given upgrade options.
         /// Calls onSelected when the player picks one.
+        /// Pass a rerollGenerator to enable rerolls; pass rerollCount > 0 to allow them.
         /// </summary>
-        public void Show(UpgradeDefinition[] options, Action<UpgradeDefinition> onSelected)
+        public void Show(UpgradeDefinition[] options, Action<UpgradeDefinition> onSelected,
+                         int rerollCount = 0, Func<UpgradeDefinition[]> rerollGenerator = null)
         {
             if (options == null || options.Length != 3)
             {
@@ -50,9 +66,23 @@ namespace YuumisProwl.Progression
                 return;
             }
 
-            currentOptions = options;
             onUpgradeSelected = onSelected;
+            onRerollRequested = rerollGenerator;
+            rerollsRemaining = rerollCount;
+
+            SetOptions(options);
+            UpdateRerollDisplay();
+
+            canvasGroup.blocksRaycasts = true;
+            canvasGroup.interactable = true;
             isWaitingForSelection = true;
+
+            StartCoroutine(FadeIn());
+        }
+
+        private void SetOptions(UpgradeDefinition[] options)
+        {
+            currentOptions = options;
 
             for (int i = 0; i < 3; i++)
             {
@@ -68,9 +98,35 @@ namespace YuumisProwl.Progression
 
                 optionButtons[i].interactable = true;
             }
+        }
 
-            gameObject.SetActive(true);
-            StartCoroutine(FadeIn());
+        private void UpdateRerollDisplay()
+        {
+            if (rerollButton != null)
+            {
+                rerollButton.gameObject.SetActive(onRerollRequested != null);
+                rerollButton.interactable = rerollsRemaining > 0;
+            }
+
+            if (rerollCountText != null)
+                rerollCountText.text = $"Rerolls: {rerollsRemaining}";
+        }
+
+        private void OnRerollClicked()
+        {
+            if (rerollsRemaining <= 0 || onRerollRequested == null)
+                return;
+
+            var newOptions = onRerollRequested.Invoke();
+            if (newOptions == null || newOptions.Length != 3)
+            {
+                Debug.LogError("UpgradeDraftUI: Reroll generator returned invalid options.");
+                return;
+            }
+
+            rerollsRemaining--;
+            SetOptions(newOptions);
+            UpdateRerollDisplay();
         }
 
         private void SelectUpgrade(int index)
@@ -83,6 +139,9 @@ namespace YuumisProwl.Progression
 
             foreach (var btn in optionButtons)
                 btn.interactable = false;
+
+            if (rerollButton != null)
+                rerollButton.interactable = false;
 
             StartCoroutine(FadeOut(() => onUpgradeSelected?.Invoke(selected)));
         }
@@ -111,20 +170,18 @@ namespace YuumisProwl.Progression
                 yield return null;
             }
             canvasGroup.alpha = 0f;
-            gameObject.SetActive(false);
+            canvasGroup.blocksRaycasts = false;
+            canvasGroup.interactable = false;
             onComplete?.Invoke();
-        }
-
-        private void Hide()
-        {
-            gameObject.SetActive(false);
-            canvasGroup.alpha = 0f;
         }
 
         private void OnDestroy()
         {
             for (int i = 0; i < optionButtons.Length; i++)
                 optionButtons[i].onClick.RemoveAllListeners();
+
+            if (rerollButton != null)
+                rerollButton.onClick.RemoveAllListeners();
         }
     }
 }
