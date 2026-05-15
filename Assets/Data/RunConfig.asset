@@ -14,8 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mapPool:
   - {fileID: 3040890633578842797, guid: 7d892c9ae710aef42a30dca5a3465926, type: 3}
-  mapCount: 2
+  mapCount: 3
   allowDuplicates: 1
+  shopFloorIndices: 00000000
+  shopRerollCost: 25
   ballSpeedCurve:
     serializedVersion: 2
     m_Curve:
@@ -64,3 +66,5 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+  baseGoldPerFloor: 30
+  goldPerCascadeBonus: 5

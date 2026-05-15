@@ -27,8 +27,17 @@ namespace YuumisProwl.VFX
                  "Below this only '+N' is shown.")]
         [SerializeField] private int comboLabelMinCascade = 1;
 
+        [Header("Gold Popup")]
+        [Tooltip("Color of the floating gold-earned popup shown after a cascade sequence.")]
+        [SerializeField] private Color goldColor = new Color(1f, 0.78f, 0.2f);
+        [Tooltip("World-space offset applied to the gold popup relative to the last match centroid, so it doesn't overlap the combo text.")]
+        [SerializeField] private Vector3 goldPopupOffset = new Vector3(0f, -0.6f, 0f);
+
         private ObjectPool<BallDestructionEffect> effectPool;
         private ObjectPool<ComboPopup> popupPool;
+
+        // Centroid of the most recent match — used to position the post-cascade gold popup.
+        private Vector3 lastMatchCentroid;
 
         private void Awake()
         {
@@ -58,6 +67,7 @@ namespace YuumisProwl.VFX
             Vector3 centroid = Vector3.zero;
             for (int i = 0; i < positions.Count; i++) centroid += positions[i];
             centroid /= positions.Count;
+            lastMatchCentroid = centroid;
 
             if (effectPool != null)
             {
@@ -76,6 +86,19 @@ namespace YuumisProwl.VFX
                 popup.Play(text, tint, centroid);
                 StartCoroutine(ReturnPopupAfter(popup));
             }
+        }
+
+        /// <summary>
+        /// Shows a floating "+N Gold" popup at the most recent match centroid.
+        /// Called by RunManager after a cascade sequence awards gold.
+        /// </summary>
+        public void ShowGoldPopup(int goldAmount)
+        {
+            if (popupPool == null || goldAmount <= 0) return;
+
+            var popup = popupPool.Get();
+            popup.Play($"+{goldAmount} Gold", goldColor, lastMatchCentroid + goldPopupOffset);
+            StartCoroutine(ReturnPopupAfter(popup));
         }
 
         private IEnumerator ReturnEffectAfter(BallDestructionEffect effect)

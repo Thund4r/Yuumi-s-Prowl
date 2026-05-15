@@ -60,27 +60,90 @@ namespace YuumisProwl.Progression
 
         /// <summary>
         /// Loads the player profile from disk, or creates a new one if it doesn't exist.
+        /// Handles missing, empty, and corrupt save files gracefully — a bad file is
+        /// backed up (so it isn't silently lost) and a fresh profile is created.
         /// </summary>
         private void LoadProfile()
         {
-            if (File.Exists(saveFilePath))
-            {
-                try
-                {
-                    string json = File.ReadAllText(saveFilePath);
-                    Profile = JsonUtility.FromJson<PlayerProfile>(json);
-                    Debug.Log($"PlayerProfileManager: loaded profile from {saveFilePath}");
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"PlayerProfileManager: failed to load profile — {e.Message}. Creating new profile.");
-                    Profile = new PlayerProfile();
-                }
-            }
-            else
+            if (!File.Exists(saveFilePath))
             {
                 Profile = new PlayerProfile();
-                Debug.Log($"PlayerProfileManager: no save file found. Created new profile.");
+                Debug.Log("PlayerProfileManager: no save file found. Created new profile.");
+                return;
+            }
+
+            string json = null;
+            try
+            {
+                json = File.ReadAllText(saveFilePath);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"PlayerProfileManager: could not read save file — {e.Message}. Creating new profile.");
+                Profile = new PlayerProfile();
+                return;
+            }
+
+            // Empty / whitespace-only file — treat as a fresh profile.
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                Debug.LogWarning("PlayerProfileManager: save file is empty. Creating new profile.");
+                BackupCorruptSave(json);
+                Profile = new PlayerProfile();
+                return;
+            }
+
+            // Parse — JsonUtility throws on malformed JSON and returns null on some inputs.
+            PlayerProfile parsed = null;
+            try
+            {
+                parsed = JsonUtility.FromJson<PlayerProfile>(json);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"PlayerProfileManager: save file is corrupt — {e.Message}. Backing it up and creating new profile.");
+            }
+
+            if (parsed == null)
+            {
+                BackupCorruptSave(json);
+                Profile = new PlayerProfile();
+                return;
+            }
+
+            Profile = parsed;
+            SanitizeProfile(Profile);
+            Debug.Log($"PlayerProfileManager: loaded profile from {saveFilePath}");
+        }
+
+        /// <summary>
+        /// Repairs a loaded profile so downstream code never hits a null array/field —
+        /// e.g. an older save written before metaUpgrades existed.
+        /// </summary>
+        private static void SanitizeProfile(PlayerProfile profile)
+        {
+            if (profile.metaUpgrades == null)
+                profile.metaUpgrades = new MetaUpgradeState[0];
+
+            if (profile.essenceTotal < 0) profile.essenceTotal = 0;
+            if (profile.essenceSpent < 0) profile.essenceSpent = 0;
+        }
+
+        /// <summary>
+        /// Renames a bad save file to *.corrupt so the player's data isn't silently
+        /// overwritten and the file can be inspected later.
+        /// </summary>
+        private void BackupCorruptSave(string contents)
+        {
+            try
+            {
+                string backupPath = saveFilePath + ".corrupt";
+                File.WriteAllText(backupPath, contents ?? string.Empty);
+                Debug.LogWarning($"PlayerProfileManager: backed up bad save to {backupPath}");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"PlayerProfileManager: failed to back up corrupt save — {e.Message}");
             }
         }
 

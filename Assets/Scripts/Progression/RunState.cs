@@ -13,7 +13,7 @@ namespace YuumisProwl.Progression
         public RunNode[] nodes;
         public int currentNodeIndex;
         public int gold;
-        public List<object> appliedUpgrades = new List<object>(); // typed in step 4 (UpgradeDefinition)
+        public List<UpgradeDefinition> appliedUpgrades = new List<UpgradeDefinition>();
 
         public RunNode CurrentNode =>
             (nodes != null && currentNodeIndex >= 0 && currentNodeIndex < nodes.Length)
@@ -22,5 +22,14 @@ namespace YuumisProwl.Progression
 
         public bool IsLastNode => nodes != null && currentNodeIndex >= nodes.Length - 1;
         public int FloorsCleared => currentNodeIndex; // how many nodes the player walked past
+
+        /// <summary>
+        /// Returns true if the player has already acquired this upgrade in this run.
+        /// Used to filter non-stackable upgrades from future drafts/shops.
+        /// </summary>
+        public bool HasUpgrade(UpgradeDefinition upgrade)
+        {
+            return upgrade != null && appliedUpgrades.Contains(upgrade);
+        }
     }
 }

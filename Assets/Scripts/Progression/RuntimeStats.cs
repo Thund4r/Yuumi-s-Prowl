@@ -46,6 +46,14 @@ namespace YuumisProwl.Progression
         [Header("Hammer")]
         public float HammerRecoilDistance;
 
+        [Header("Gold")]
+        [Tooltip("Multiplier on gold rewards (1.0 = no bonus, 1.5 = +50%).")]
+        public float GoldGainMultiplier;
+        [Tooltip("Flat bonus gold per cascade beyond the first match in a sequence.")]
+        public int GoldPerCascade;
+        [Tooltip("If true, the in-run shop offers a reroll button (cost defined in RunConfig).")]
+        public bool ShopRerollEnabled;
+
         private void Awake()
         {
             ResetToDefaults();
@@ -59,6 +67,9 @@ namespace YuumisProwl.Progression
         {
             YuumiRotationSpeed = yuumiRotationSpeedDefault;
             PierceWidthMultiplier = 1f;
+            GoldGainMultiplier = 1f;
+            GoldPerCascade = 0;
+            ShopRerollEnabled = false;
 
             if (defaults != null)
             {
@@ -72,7 +83,16 @@ namespace YuumisProwl.Progression
             }
             else
             {
-                Debug.LogWarning("RuntimeStats: Defaults (PowerUpSettings) not assigned. Charge/pierce/bomb/hammer values left at zero — assign in inspector.");
+                // No baseline asset — zero the gameplay stats so a missing reference
+                // can never leave per-run upgrade values stale across runs.
+                ChargePerBallDestroyed = 0;
+                CascadeBonusCharge = 0;
+                ChargeThreshold = 10;
+                PierceMaxDistance = 0f;
+                PierceSpeedMultiplier = 1f;
+                BombRadius = 0f;
+                HammerRecoilDistance = 0f;
+                Debug.LogWarning("RuntimeStats: Defaults (PowerUpSettings) not assigned — using fallback baselines. Assign PowerUpSettings in the inspector for correct values.");
             }
         }
     }

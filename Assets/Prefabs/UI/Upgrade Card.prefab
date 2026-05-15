@@ -464,7 +464,7 @@ MonoBehaviour:
   nameText: {fileID: 88705274113998529}
   descriptionText: {fileID: 5265076760833963774}
   levelText: {fileID: 4481695529184050454}
-  bonusText: {fileID: 0}
+  bonusText: {fileID: 1880965011177575778}
   progressBar: {fileID: 2288324396838181106}
   costText: {fileID: 5773636300641654258}
   buyButton: {fileID: 7222872507166145422}

@@ -39,15 +39,15 @@ MonoBehaviour:
     m_RotationOrder: 4
   essenceDifficultyScaling: 1
   metaUpgrades:
-  - upgradeId: 01
+  - upgradeId: ChargePerBall
     upgradeName: Charge Per Ball
     description: Amount of powerup charge gained per ball cleared
     icon: {fileID: 0}
-    maxRanks: 10
+    maxRanks: 8
     essenceCostPerRank: 50
-    incrementPerRank: 1
-    capValue: 10
-  - upgradeId: 02
+    incrementPerRank: 0.25
+    capValue: 2
+  - upgradeId: EssenceGain
     upgradeName: Essence Gain
     description: Essence gained at the end of a run
     icon: {fileID: 0}
@@ -55,7 +55,7 @@ MonoBehaviour:
     essenceCostPerRank: 100
     incrementPerRank: 0.125
     capValue: 2
-  - upgradeId: 03
+  - upgradeId: BallSpeedReduction
     upgradeName: Ball speed reduction
     description: Reduces speed at which balls travel down the path
     icon: {fileID: 0}
@@ -63,7 +63,7 @@ MonoBehaviour:
     essenceCostPerRank: 75
     incrementPerRank: -0.625
     capValue: -0.5
-  - upgradeId: 04
+  - upgradeId: DraftReroll
     upgradeName: Reroll
     description: Lets you reroll upgrades at the end of a level
     icon: {fileID: 0}

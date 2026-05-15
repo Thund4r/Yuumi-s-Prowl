@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using YuumisProwl.Managers;
 using YuumisProwl.BallChain;
+using YuumisProwl.VFX;
 
 namespace YuumisProwl.Progression
 {
@@ -11,12 +12,6 @@ namespace YuumisProwl.Progression
     /// Drives the meta-loop of a run: builds the RunNode[] at start, walks it one node
     /// at a time, listens to GameManager win/lose to advance or end the run, and
     /// hands map-loading to LevelManager.
-    ///
-    /// Setup:
-    ///   1. Add a "RunManager" GameObject to the Game scene.
-    ///   2. Wire LevelManager, GameManager, RuntimeStats, RunConfig in the inspector.
-    ///   3. Make sure LevelManager no longer auto-loads on its own — RunManager.Start
-    ///      triggers the first map load.
     /// </summary>
     public class RunManager : MonoBehaviour
     {
@@ -24,13 +19,17 @@ namespace YuumisProwl.Progression
         [SerializeField] private RunConfig config;
         [SerializeField] private LevelManager levelManager;
         [SerializeField] private GameManager gameManager;
+        [SerializeField] private MatchProcessor matchProcessor;
         [SerializeField] private RuntimeStats runtimeStats;
         [SerializeField] private UpgradeDraftUI upgradeDraftUI;
+        [SerializeField] private InRunShopUI inRunShopUI;
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private MetaProgressionSettings metaProgressionSettings;
+        [Tooltip("Optional — used to show a floating gold popup after cascades.")]
+        [SerializeField] private MatchEffectPlayer matchEffectPlayer;
 
         [Header("Upgrades")]
-        [Tooltip("Pool of upgrades that can be drafted in-run.")]
+        [Tooltip("Pool of upgrades available in this run. Each upgrade's IsDraftable / IsShoppable flags decide which contexts it appears in.")]
         [SerializeField] private UpgradeDefinition[] upgradePool;
 
         [Header("Scene Flow")]
@@ -42,8 +41,6 @@ namespace YuumisProwl.Progression
         private RunState state;
         public RunState State => state;
 
-        private bool isAwaitingUpgradeSelection = false;
-
         private void Start()
         {
             if (gameManager == null)  { Debug.LogError("RunManager: GameManager not assigned!"); return; }
@@ -52,6 +49,9 @@ namespace YuumisProwl.Progression
 
             gameManager.OnGameWon  += HandleNodeWon;
             gameManager.OnGameLost += HandleRunLost;
+
+            if (matchProcessor != null)
+                matchProcessor.OnMatchSequenceComplete += HandleMatchSequenceComplete;
 
             StartNewRun();
         }
@@ -63,11 +63,10 @@ namespace YuumisProwl.Progression
                 gameManager.OnGameWon  -= HandleNodeWon;
                 gameManager.OnGameLost -= HandleRunLost;
             }
+            if (matchProcessor != null)
+                matchProcessor.OnMatchSequenceComplete -= HandleMatchSequenceComplete;
         }
 
-        /// <summary>
-        /// Generates a fresh RunState, resets per-run stats, and loads the first node.
-        /// </summary>
         public void StartNewRun()
         {
             state = GenerateRun();
@@ -78,8 +77,18 @@ namespace YuumisProwl.Progression
                 runtimeStats.ResetToDefaults();
                 ApplyMetaUpgradesToRunStats();
             }
+            else
+            {
+                Debug.LogWarning("RunManager: runtimeStats not assigned — per-run stats will NOT reset between runs!");
+            }
 
             Debug.Log($"RunManager: starting new run — {state.nodes.Length} nodes.");
+            if (runtimeStats != null)
+            {
+                Debug.Log($"RunManager: RUN-START STATS — ChargePerBall={runtimeStats.ChargePerBallDestroyed}, " +
+                          $"ShopRerollEnabled={runtimeStats.ShopRerollEnabled}, GoldGainMult={runtimeStats.GoldGainMultiplier:F2}, " +
+                          $"PierceWidth={runtimeStats.PierceWidthMultiplier:F2}, BombRadius={runtimeStats.BombRadius:F2}");
+            }
             LoadCurrentNode();
         }
 
@@ -91,7 +100,7 @@ namespace YuumisProwl.Progression
             var profile = PlayerProfileManager.Profile;
             foreach (var upgrade in profile.metaUpgrades)
             {
-                if (upgrade.rank < 0) continue; // Not purchased
+                if (upgrade.rank < 0) continue;
 
                 float value = metaProgressionSettings.GetUpgradeValue(upgrade.upgradeId, upgrade.rank);
 
@@ -101,8 +110,7 @@ namespace YuumisProwl.Progression
                         runtimeStats.ChargePerBallDestroyed += Mathf.RoundToInt(value);
                         break;
                     case "BallSpeedReduction":
-                        // Reduction is stored as additive negative (e.g., -0.1 = 10% reduction)
-                        // Will be applied to ballSpeedMult in LoadCurrentNode
+                        // Reduction applied to ballSpeedMult in LoadCurrentNode
                         break;
                 }
                 // EssenceGain applied during reward calculation
@@ -112,10 +120,6 @@ namespace YuumisProwl.Progression
             Debug.Log($"RunManager: applied {profile.metaUpgrades.Length} meta upgrades to this run.");
         }
 
-        /// <summary>
-        /// Gets the player's ball speed reduction from meta upgrades.
-        /// Returns a negative value (e.g., -0.1 for 10% reduction).
-        /// </summary>
         private float GetBallSpeedReduction()
         {
             if (PlayerProfileManager.Profile == null || metaProgressionSettings == null)
@@ -126,30 +130,22 @@ namespace YuumisProwl.Progression
                 if (upgrade.upgradeId == "BallSpeedReduction" && upgrade.rank >= 0)
                 {
                     float reduction = metaProgressionSettings.GetUpgradeValue("BallSpeedReduction", upgrade.rank);
-                    return -reduction; // Return as negative for subtraction
+                    return -reduction;
                 }
             }
             return 0f;
         }
 
-        /// <summary>
-        /// Gets the player's available draft rerolls for this run.
-        /// </summary>
         public int GetDraftRerollCount()
         {
             if (PlayerProfileManager.Profile == null || metaProgressionSettings == null)
-            {
-                Debug.Log("GetDraftRerollCount: Profile or settings null");
                 return 0;
-            }
 
-            Debug.Log($"GetDraftRerollCount: scanning {PlayerProfileManager.Profile.metaUpgrades.Length} upgrades");
             foreach (var upgrade in PlayerProfileManager.Profile.metaUpgrades)
             {
-                Debug.Log($"  upgradeId='{upgrade.upgradeId}' rank={upgrade.rank}");
                 if (upgrade.upgradeId == "DraftReroll" && upgrade.rank >= 0)
                 {
-                    return upgrade.rank + 1; // rank 0 = 1 reroll, rank 1 = 2 rerolls, etc.
+                    return upgrade.rank + 1;
                 }
             }
             return 0;
@@ -164,31 +160,38 @@ namespace YuumisProwl.Progression
             }
 
             int n = Mathf.Max(1, config.mapCount);
-            RunNode[] nodes = new RunNode[n];
 
+            // Build the list of gameplay nodes first.
+            List<Map> gameplayMaps = new List<Map>();
             if (config.allowDuplicates)
             {
                 for (int i = 0; i < n; i++)
-                {
-                    Map pick = config.mapPool[Random.Range(0, config.mapPool.Length)];
-                    nodes[i] = new RunNode(RunNodeType.Gameplay, pick);
-                }
+                    gameplayMaps.Add(config.mapPool[Random.Range(0, config.mapPool.Length)]);
             }
             else
             {
-                // Pick without replacement; refill the bag when exhausted so small pools
-                // still produce a full run.
                 var bag = new List<Map>(config.mapPool);
                 for (int i = 0; i < n; i++)
                 {
                     if (bag.Count == 0) bag.AddRange(config.mapPool);
                     int idx = Random.Range(0, bag.Count);
-                    nodes[i] = new RunNode(RunNodeType.Gameplay, bag[idx]);
+                    gameplayMaps.Add(bag[idx]);
                     bag.RemoveAt(idx);
                 }
             }
 
-            return new RunState { nodes = nodes, currentNodeIndex = 0, gold = 0 };
+            // Interleave shop nodes after the specified gameplay floor indices.
+            List<RunNode> nodeList = new List<RunNode>();
+            for (int i = 0; i < gameplayMaps.Count; i++)
+            {
+                nodeList.Add(new RunNode(RunNodeType.Gameplay, gameplayMaps[i]));
+                // After this gameplay floor, insert a shop if configured. Don't insert after
+                // the very last gameplay floor — the run is over at that point.
+                if (i < gameplayMaps.Count - 1 && config.HasShopAfterFloor(i))
+                    nodeList.Add(new RunNode(RunNodeType.Shop, null));
+            }
+
+            return new RunState { nodes = nodeList.ToArray(), currentNodeIndex = 0, gold = 0 };
         }
 
         private void LoadCurrentNode()
@@ -213,25 +216,48 @@ namespace YuumisProwl.Progression
                     float ballSpeedMult = config.SampleBallSpeedMult(t);
                     float totalBallsMult = config.SampleTotalBallsMult(t);
 
-                    // Apply ball speed reduction from meta upgrades
                     float speedReduction = GetBallSpeedReduction();
-                    ballSpeedMult = Mathf.Max(0.1f, ballSpeedMult + speedReduction); // Clamp to 0.1× minimum
+                    ballSpeedMult = Mathf.Max(0.1f, ballSpeedMult + speedReduction);
 
                     Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, totalBalls×{totalBallsMult:F2}");
                     levelManager.LoadMap(node.mapPrefab, ballSpeedMult, totalBallsMult);
                     break;
 
                 case RunNodeType.Shop:
-                    // Stubbed until step 6 — for now just skip past shop nodes.
-                    Debug.Log("RunManager: shop node encountered (not yet implemented). Skipping.");
-                    AdvanceToNextNode();
+                    OpenShop();
                     break;
             }
         }
 
-        /// <summary>
-        /// 0 at the first node, 1 at the last. Used to sample scaling curves.
-        /// </summary>
+        private void OpenShop()
+        {
+            if (inRunShopUI == null)
+            {
+                Debug.LogWarning("RunManager: Shop node reached but InRunShopUI is not assigned. Skipping.");
+                AdvanceToNextNode();
+                return;
+            }
+
+            // The number of upgrades shown is the number of card slots in the shop UI.
+            int slots = inRunShopUI.CardSlotCount;
+            var options = PickShopUpgrades(slots);
+            if (options.Length == 0)
+            {
+                Debug.LogWarning("RunManager: No shop-eligible upgrades found in pool. Skipping shop.");
+                AdvanceToNextNode();
+                return;
+            }
+
+            inRunShopUI.Show(
+                options,
+                runtimeStats,
+                state,
+                config.shopRerollCost,
+                () => PickShopUpgrades(slots),
+                AdvanceToNextNode
+            );
+        }
+
         private float GetFloorProgress()
         {
             int total = state.nodes.Length;
@@ -247,32 +273,68 @@ namespace YuumisProwl.Progression
                 ballChainManager.ClearChain();
             }
 
-            // If it's the last node, don't show draft—just end the run.
+            // Award gold for clearing this gameplay floor.
+            GrantGoldForFloor();
+
             if (state.IsLastNode)
             {
                 EndRun(won: true);
                 return;
             }
 
-            // Show upgrade draft before advancing to the next node.
             if (upgradeDraftUI != null && upgradePool != null && upgradePool.Length > 0)
             {
-                isAwaitingUpgradeSelection = true;
-                var options = PickRandomUpgrades(3);
+                var options = PickDraftUpgrades(3);
+                if (options.Length == 0)
+                {
+                    Debug.LogWarning("RunManager: No draft-eligible upgrades available. Advancing.");
+                    AdvanceToNextNode();
+                    return;
+                }
                 int rerollCount = GetDraftRerollCount();
-                upgradeDraftUI.Show(options, HandleUpgradeSelected, rerollCount, () => PickRandomUpgrades(3));
+                upgradeDraftUI.Show(options, HandleUpgradeSelected, rerollCount, () => PickDraftUpgrades(3));
             }
             else
             {
-                // No upgrade system configured; just advance.
                 AdvanceToNextNode();
+            }
+        }
+
+        private void GrantGoldForFloor()
+        {
+            if (config == null || state == null) return;
+
+            // Flat gold per floor — does not scale with depth or difficulty.
+            float goldGainMult = runtimeStats != null ? runtimeStats.GoldGainMultiplier : 1f;
+            int gold = Mathf.RoundToInt(config.baseGoldPerFloor * goldGainMult);
+
+            state.gold += gold;
+            Debug.Log($"RunManager: awarded {gold} gold for clearing floor. Total: {state.gold}");
+        }
+
+        private void HandleMatchSequenceComplete(int cascadeCount, int lastGapGlobalIndex)
+        {
+            if (config == null || state == null || cascadeCount <= 0) return;
+
+            int perCascadeBonus = config.goldPerCascadeBonus;
+            if (runtimeStats != null)
+                perCascadeBonus += runtimeStats.GoldPerCascade;
+
+            float goldGainMult = runtimeStats != null ? runtimeStats.GoldGainMultiplier : 1f;
+            int gold = Mathf.RoundToInt(cascadeCount * perCascadeBonus * goldGainMult);
+
+            if (gold > 0)
+            {
+                state.gold += gold;
+                Debug.Log($"RunManager: cascade bonus +{gold} gold ({cascadeCount} cascades). Total: {state.gold}");
+
+                if (matchEffectPlayer != null)
+                    matchEffectPlayer.ShowGoldPopup(gold);
             }
         }
 
         private void HandleUpgradeSelected(UpgradeDefinition upgrade)
         {
-            isAwaitingUpgradeSelection = false;
-
             if (upgrade != null && runtimeStats != null)
             {
                 upgrade.Apply(runtimeStats);
@@ -283,23 +345,51 @@ namespace YuumisProwl.Progression
             AdvanceToNextNode();
         }
 
-        private UpgradeDefinition[] PickRandomUpgrades(int count)
+        /// <summary>
+        /// Picks N random upgrades that are IsDraftable and not non-stackable-already-owned.
+        /// </summary>
+        private UpgradeDefinition[] PickDraftUpgrades(int count)
+        {
+            return PickFilteredUpgrades(count, u => u.IsDraftable && IsAvailable(u));
+        }
+
+        /// <summary>
+        /// Picks N random upgrades that are IsShoppable and not non-stackable-already-owned.
+        /// </summary>
+        private UpgradeDefinition[] PickShopUpgrades(int count)
+        {
+            return PickFilteredUpgrades(count, u => u.IsShoppable && IsAvailable(u));
+        }
+
+        /// <summary>
+        /// An upgrade is "available" if it's stackable, or if it's not stackable and hasn't been acquired yet.
+        /// </summary>
+        private bool IsAvailable(UpgradeDefinition upgrade)
+        {
+            if (upgrade.IsStackable) return true;
+            return state == null || !state.HasUpgrade(upgrade);
+        }
+
+        private UpgradeDefinition[] PickFilteredUpgrades(int count, System.Func<UpgradeDefinition, bool> predicate)
         {
             if (upgradePool == null || upgradePool.Length == 0)
                 return new UpgradeDefinition[0];
 
-            count = Mathf.Min(count, upgradePool.Length);
-            var picked = new UpgradeDefinition[count];
-            var indices = new System.Collections.Generic.List<int>();
-
+            // Collect eligible upgrades.
+            List<UpgradeDefinition> eligible = new List<UpgradeDefinition>();
             for (int i = 0; i < upgradePool.Length; i++)
-                indices.Add(i);
+            {
+                if (upgradePool[i] != null && predicate(upgradePool[i]))
+                    eligible.Add(upgradePool[i]);
+            }
 
+            count = Mathf.Min(count, eligible.Count);
+            var picked = new UpgradeDefinition[count];
             for (int i = 0; i < count; i++)
             {
-                int idx = Random.Range(0, indices.Count);
-                picked[i] = upgradePool[indices[idx]];
-                indices.RemoveAt(idx);
+                int idx = Random.Range(0, eligible.Count);
+                picked[i] = eligible[idx];
+                eligible.RemoveAt(idx);
             }
 
             return picked;
@@ -344,14 +434,11 @@ namespace YuumisProwl.Progression
             if (floorsCleared <= 0 || metaProgressionSettings == null)
                 return;
 
-            // Calculate essence reward: base * depth multiplier * difficulty multiplier * meta gain bonus
             int essenceBase = metaProgressionSettings.baseEssencePerFloor * floorsCleared;
 
-            // Depth multiplier: use the average depth (roughly mid-run)
             float avgProgress = floorsCleared > 0 ? (floorsCleared - 1) / (float)Mathf.Max(1, state.nodes.Length - 1) : 0f;
             float depthMult = metaProgressionSettings.SampleEssenceDepthMult(avgProgress);
 
-            // Difficulty multiplier: average of ball speed and total balls curves at the final floor
             float finalProgress = floorsCleared > 0 ? (floorsCleared - 1) / (float)Mathf.Max(1, state.nodes.Length - 1) : 0f;
             float ballSpeedMult = config != null ? config.SampleBallSpeedMult(finalProgress) : 1f;
             float totalBallsMult = config != null ? config.SampleTotalBallsMult(finalProgress) : 1f;
@@ -359,7 +446,6 @@ namespace YuumisProwl.Progression
                 ? ballSpeedMult * totalBallsMult
                 : 1f;
 
-            // Meta upgrade multiplier (EssenceGain)
             float metaGainMult = 1f;
             if (PlayerProfileManager.Profile != null && metaProgressionSettings != null)
             {
