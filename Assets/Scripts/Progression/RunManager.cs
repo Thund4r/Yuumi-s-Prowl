@@ -29,8 +29,8 @@ namespace YuumisProwl.Progression
         [SerializeField] private MatchEffectPlayer matchEffectPlayer;
 
         [Header("Upgrades")]
-        [Tooltip("Pool of upgrades available in this run. Each upgrade's IsDraftable / IsShoppable flags decide which contexts it appears in.")]
-        [SerializeField] private UpgradeDefinition[] upgradePool;
+        [Tooltip("Shared database of every upgrade in the game. Also referenced by MetaShopUI.")]
+        [SerializeField] private UpgradeDatabase upgradeDatabase;
 
         [Header("Scene Flow")]
         [Tooltip("Scene loaded when a run ends (win or lose).")]
@@ -51,7 +51,10 @@ namespace YuumisProwl.Progression
             gameManager.OnGameLost += HandleRunLost;
 
             if (matchProcessor != null)
+            {
                 matchProcessor.OnMatchSequenceComplete += HandleMatchSequenceComplete;
+                matchProcessor.OnBallsDestroyed += HandleBallsDestroyed;
+            }
 
             StartNewRun();
         }
@@ -64,7 +67,10 @@ namespace YuumisProwl.Progression
                 gameManager.OnGameLost -= HandleRunLost;
             }
             if (matchProcessor != null)
+            {
                 matchProcessor.OnMatchSequenceComplete -= HandleMatchSequenceComplete;
+                matchProcessor.OnBallsDestroyed -= HandleBallsDestroyed;
+            }
         }
 
         public void StartNewRun()
@@ -82,73 +88,59 @@ namespace YuumisProwl.Progression
                 Debug.LogWarning("RunManager: runtimeStats not assigned — per-run stats will NOT reset between runs!");
             }
 
+            // Explicitly initialize gold every run — 0 by default, or the StartingGold
+            // value granted by upgrades. Guarantees gold never carries across runs.
+            state.gold = runtimeStats != null ? runtimeStats.StartingGold : 0;
+
             Debug.Log($"RunManager: starting new run — {state.nodes.Length} nodes.");
             if (runtimeStats != null)
             {
-                Debug.Log($"RunManager: RUN-START STATS — ChargePerBall={runtimeStats.ChargePerBallDestroyed}, " +
+                Debug.Log($"RunManager: RUN-START STATS — Gold={state.gold}, ChargePerBall={runtimeStats.ChargePerBallDestroyed}, " +
                           $"ShopRerollEnabled={runtimeStats.ShopRerollEnabled}, GoldGainMult={runtimeStats.GoldGainMultiplier:F2}, " +
                           $"PierceWidth={runtimeStats.PierceWidthMultiplier:F2}, BombRadius={runtimeStats.BombRadius:F2}");
             }
             LoadCurrentNode();
         }
 
+        /// <summary>
+        /// Applies the player's purchased meta upgrades to RuntimeStats at run start.
+        /// Each meta upgrade is an UpgradeDefinition in the UpgradeDatabase, matched by
+        /// UpgradeId; it is applied once per purchased rank.
+        /// </summary>
         private void ApplyMetaUpgradesToRunStats()
         {
-            if (runtimeStats == null || PlayerProfileManager.Profile == null || metaProgressionSettings == null)
+            if (runtimeStats == null || PlayerProfileManager.Profile == null)
                 return;
 
-            var profile = PlayerProfileManager.Profile;
-            foreach (var upgrade in profile.metaUpgrades)
+            int applied = 0;
+            foreach (var saved in PlayerProfileManager.Profile.metaUpgrades)
             {
-                if (upgrade.rank < 0) continue;
+                if (saved.rank < 0) continue; // not purchased
 
-                float value = metaProgressionSettings.GetUpgradeValue(upgrade.upgradeId, upgrade.rank);
-
-                switch (upgrade.upgradeId)
+                UpgradeDefinition def = FindUpgradeById(saved.upgradeId);
+                if (def == null)
                 {
-                    case "ChargePerBall":
-                        runtimeStats.ChargePerBallDestroyed += Mathf.RoundToInt(value);
-                        break;
-                    case "BallSpeedReduction":
-                        // Reduction applied to ballSpeedMult in LoadCurrentNode
-                        break;
+                    Debug.LogWarning($"RunManager: saved meta upgrade '{saved.upgradeId}' has no matching UpgradeDefinition in the UpgradeDatabase.");
+                    continue;
                 }
-                // EssenceGain applied during reward calculation
-                // DraftReroll tracked separately in UpgradeDraftUI
+
+                def.Apply(runtimeStats, saved.rank + 1); // rank+1 = number of purchased ranks
+                applied++;
             }
 
-            Debug.Log($"RunManager: applied {profile.metaUpgrades.Length} meta upgrades to this run.");
+            Debug.Log($"RunManager: applied {applied} meta upgrade(s) to this run.");
         }
 
-        private float GetBallSpeedReduction()
+        /// <summary>Finds an upgrade in the database by its UpgradeId.</summary>
+        private UpgradeDefinition FindUpgradeById(string upgradeId)
         {
-            if (PlayerProfileManager.Profile == null || metaProgressionSettings == null)
-                return 0f;
-
-            foreach (var upgrade in PlayerProfileManager.Profile.metaUpgrades)
-            {
-                if (upgrade.upgradeId == "BallSpeedReduction" && upgrade.rank >= 0)
-                {
-                    float reduction = metaProgressionSettings.GetUpgradeValue("BallSpeedReduction", upgrade.rank);
-                    return -reduction;
-                }
-            }
-            return 0f;
+            return upgradeDatabase != null ? upgradeDatabase.FindById(upgradeId) : null;
         }
 
+        /// <summary>Number of free draft rerolls for this run — sourced from RuntimeStats.</summary>
         public int GetDraftRerollCount()
         {
-            if (PlayerProfileManager.Profile == null || metaProgressionSettings == null)
-                return 0;
-
-            foreach (var upgrade in PlayerProfileManager.Profile.metaUpgrades)
-            {
-                if (upgrade.upgradeId == "DraftReroll" && upgrade.rank >= 0)
-                {
-                    return upgrade.rank + 1;
-                }
-            }
-            return 0;
+            return runtimeStats != null ? runtimeStats.DraftRerollCount : 0;
         }
 
         private RunState GenerateRun()
@@ -216,8 +208,9 @@ namespace YuumisProwl.Progression
                     float ballSpeedMult = config.SampleBallSpeedMult(t);
                     float totalBallsMult = config.SampleTotalBallsMult(t);
 
-                    float speedReduction = GetBallSpeedReduction();
-                    ballSpeedMult = Mathf.Max(0.1f, ballSpeedMult + speedReduction);
+                    // Subtract the player's ball-speed reduction (from meta upgrades).
+                    float speedReduction = runtimeStats != null ? runtimeStats.BallSpeedReduction : 0f;
+                    ballSpeedMult = Mathf.Max(0.1f, ballSpeedMult - speedReduction);
 
                     Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, totalBalls×{totalBallsMult:F2}");
                     levelManager.LoadMap(node.mapPrefab, ballSpeedMult, totalBallsMult);
@@ -282,7 +275,7 @@ namespace YuumisProwl.Progression
                 return;
             }
 
-            if (upgradeDraftUI != null && upgradePool != null && upgradePool.Length > 0)
+            if (upgradeDraftUI != null && upgradeDatabase != null)
             {
                 var options = PickDraftUpgrades(3);
                 if (options.Length == 0)
@@ -333,6 +326,22 @@ namespace YuumisProwl.Progression
             }
         }
 
+        /// <summary>
+        /// Color-synergy hook: grants bonus gold each time a match of a color the player
+        /// has a ColorMatchGold upgrade for is destroyed. Fires once per match.
+        /// </summary>
+        private void HandleBallsDestroyed(int count, BallColor color)
+        {
+            if (state == null || runtimeStats == null) return;
+
+            int bonus = runtimeStats.GetColorMatchGold(color);
+            if (bonus > 0)
+            {
+                state.gold += bonus;
+                Debug.Log($"RunManager: {color}-match bonus +{bonus} gold. Total: {state.gold}");
+            }
+        }
+
         private void HandleUpgradeSelected(UpgradeDefinition upgrade)
         {
             if (upgrade != null && runtimeStats != null)
@@ -362,25 +371,25 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
-        /// An upgrade is "available" if it's stackable, or if it's not stackable and hasn't been acquired yet.
+        /// An upgrade is "available" if it hasn't yet been acquired up to its MaxRank this run.
         /// </summary>
         private bool IsAvailable(UpgradeDefinition upgrade)
         {
-            if (upgrade.IsStackable) return true;
-            return state == null || !state.HasUpgrade(upgrade);
+            return state == null || state.CanAcquire(upgrade);
         }
 
         private UpgradeDefinition[] PickFilteredUpgrades(int count, System.Func<UpgradeDefinition, bool> predicate)
         {
-            if (upgradePool == null || upgradePool.Length == 0)
+            if (upgradeDatabase == null || upgradeDatabase.AllUpgrades == null || upgradeDatabase.AllUpgrades.Length == 0)
                 return new UpgradeDefinition[0];
 
             // Collect eligible upgrades.
+            var pool = upgradeDatabase.AllUpgrades;
             List<UpgradeDefinition> eligible = new List<UpgradeDefinition>();
-            for (int i = 0; i < upgradePool.Length; i++)
+            for (int i = 0; i < pool.Length; i++)
             {
-                if (upgradePool[i] != null && predicate(upgradePool[i]))
-                    eligible.Add(upgradePool[i]);
+                if (pool[i] != null && predicate(pool[i]))
+                    eligible.Add(pool[i]);
             }
 
             count = Mathf.Min(count, eligible.Count);
@@ -446,18 +455,8 @@ namespace YuumisProwl.Progression
                 ? ballSpeedMult * totalBallsMult
                 : 1f;
 
-            float metaGainMult = 1f;
-            if (PlayerProfileManager.Profile != null && metaProgressionSettings != null)
-            {
-                foreach (var upgrade in PlayerProfileManager.Profile.metaUpgrades)
-                {
-                    if (upgrade.upgradeId == "EssenceGain" && upgrade.rank >= 0)
-                    {
-                        metaGainMult = metaProgressionSettings.GetUpgradeValue("EssenceGain", upgrade.rank);
-                        break;
-                    }
-                }
-            }
+            // Essence-gain bonus from meta upgrades is baked into RuntimeStats at run start.
+            float metaGainMult = runtimeStats != null ? runtimeStats.EssenceGainMultiplier : 1f;
 
             int essenceGranted = Mathf.Max(1, Mathf.RoundToInt(essenceBase * depthMult * difficultyMult * metaGainMult));
             PlayerProfileManager.GrantEssence(essenceGranted);

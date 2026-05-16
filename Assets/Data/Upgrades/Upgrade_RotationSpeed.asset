@@ -10,14 +10,17 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
-  m_Name: Upgrade_PierceWidth
+  m_Name: Upgrade_RotationSpeed
   m_EditorClassIdentifier: 
-  <Stat>k__BackingField: 2
-  <UpgradeName>k__BackingField: Pierce width
-  <Description>k__BackingField: Pierce powerup gains 50% width
+  <UpgradeId>k__BackingField: RotationSpeed
+  <Stat>k__BackingField: 0
+  <UpgradeName>k__BackingField: Faster Rotation
+  <Description>k__BackingField: Yuumi gains +20% rotation speed
   <Icon>k__BackingField: {fileID: 0}
-  <ModifierValue>k__BackingField: 1.5
+  <ModifierValue>k__BackingField: 0.2
   <IsDraftable>k__BackingField: 1
   <IsShoppable>k__BackingField: 1
-  <IsStackable>k__BackingField: 1
+  <IsMetaShop>k__BackingField: 0
+  <MaxRank>k__BackingField: 1
   <ShopCost>k__BackingField: 100
+  <RankEssenceCosts>k__BackingField: 

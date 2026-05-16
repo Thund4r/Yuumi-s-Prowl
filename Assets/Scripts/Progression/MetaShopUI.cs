@@ -1,13 +1,15 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace YuumisProwl.Progression
 {
     /// <summary>
-    /// Meta shop UI: displays purchasable upgrades and essence balance.
-    /// Shows upgrades as cards with progress bars. Player can buy upgrades with essence.
+    /// Meta shop UI: displays purchasable meta upgrades and the essence balance.
+    /// Meta upgrades are ordinary UpgradeDefinition assets with IsMetaShop enabled;
+    /// assign them to the metaUpgrades array. A card is instantiated per upgrade.
     /// </summary>
     public class MetaShopUI : MonoBehaviour
     {
@@ -17,18 +19,19 @@ namespace YuumisProwl.Progression
         [SerializeField] private MetaShopUpgradeCard upgradeCardPrefab;
         [SerializeField] private Button closeButton;
 
-        [SerializeField] private MetaProgressionSettings metaProgressionSettings;
+        [Tooltip("Shared upgrade database. The meta shop displays every upgrade flagged IsMetaShop.")]
+        [SerializeField] private UpgradeDatabase upgradeDatabase;
+
+        [SerializeField] private float fadeDuration = 0.3f;
 
         private List<MetaShopUpgradeCard> upgradeCards = new List<MetaShopUpgradeCard>();
-        private float fadeDuration = 0.3f;
 
         private void Awake()
         {
             if (canvasGroup == null)
                 canvasGroup = GetComponent<CanvasGroup>();
 
-            // Immediately hide without deactivating — keeps the GameObject alive so
-            // Start() can run InitializeUpgradeCards and Awake can wire listeners.
+            // Hide without deactivating so Start() can run InitializeUpgradeCards.
             canvasGroup.alpha = 0f;
             canvasGroup.blocksRaycasts = false;
             canvasGroup.interactable = false;
@@ -44,16 +47,23 @@ namespace YuumisProwl.Progression
 
         private void InitializeUpgradeCards()
         {
-            if (metaProgressionSettings == null || metaProgressionSettings.metaUpgrades.Length == 0)
+            if (upgradeDatabase == null)
             {
-                Debug.LogWarning("MetaShopUI: MetaProgressionSettings not assigned or has no upgrades.");
+                Debug.LogWarning("MetaShopUI: UpgradeDatabase not assigned.");
                 return;
             }
 
-            foreach (var cfg in metaProgressionSettings.metaUpgrades)
+            var metaUpgrades = upgradeDatabase.GetMetaShopUpgrades();
+            if (metaUpgrades.Count == 0)
+            {
+                Debug.LogWarning("MetaShopUI: the UpgradeDatabase has no upgrades flagged IsMetaShop.");
+                return;
+            }
+
+            foreach (var upgrade in metaUpgrades)
             {
                 var card = Instantiate(upgradeCardPrefab, upgradeCardsContainer);
-                card.Initialize(cfg, this);
+                card.Initialize(upgrade, this);
                 upgradeCards.Add(card);
             }
         }
@@ -73,28 +83,22 @@ namespace YuumisProwl.Progression
 
         private void RefreshDisplay()
         {
-            if (PlayerProfileManager.Profile == null)
-                return;
-
-            essenceBalanceText.text = $"Essence: {PlayerProfileManager.Profile.essenceTotal}";
+            if (PlayerProfileManager.Profile != null && essenceBalanceText != null)
+                essenceBalanceText.text = $"Essence: {PlayerProfileManager.Profile.essenceTotal}";
 
             foreach (var card in upgradeCards)
             {
-                card.RefreshDisplay();
+                if (card != null) card.RefreshDisplay();
             }
         }
 
+        /// <summary>Called by a card after a successful purchase — refresh balance and all cards.</summary>
         public void OnUpgradePurchased()
         {
             RefreshDisplay();
         }
 
-        public MetaProgressionSettings GetMetaProgressionSettings()
-        {
-            return metaProgressionSettings;
-        }
-
-        private System.Collections.IEnumerator FadeIn()
+        private IEnumerator FadeIn()
         {
             canvasGroup.alpha = 0f;
             float elapsed = 0f;
@@ -107,7 +111,7 @@ namespace YuumisProwl.Progression
             canvasGroup.alpha = 1f;
         }
 
-        private System.Collections.IEnumerator FadeOut()
+        private IEnumerator FadeOut()
         {
             canvasGroup.alpha = 1f;
             float elapsed = 0f;

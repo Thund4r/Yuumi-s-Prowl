@@ -247,17 +247,12 @@ namespace YuumisProwl.Projectile
                     if (hammer != null)
                     {
                         int hammerIndex = hammer.ChainIndex;
-                        float recoilDistance = hammer.PowerUpValue;
 
+                        // Removing the hammer fires BallChainManager.OnHammerDestroyed,
+                        // which MatchProcessor handles (recoil + cascade aftermath).
                         ballChainManager.RemoveBallAtIndex(hammerIndex);
 
-                        // Use ProcessHammerAftermath so the gap-close triggers cascade
-                        // detection at the merge boundary and applies a final recoil
-                        // — same flow as a normal match.
-                        if (matchProcessor != null)
-                            matchProcessor.ProcessHammerAftermath(hammerIndex, recoilDistance);
-
-                        Debug.Log($"Hammer triggered! Recoil distance: {recoilDistance}");
+                        Debug.Log($"Hammer triggered by projectile at index {hammerIndex}.");
 
                         if (ownerSpawner != null)
                             ownerSpawner.ReturnProjectile(this);

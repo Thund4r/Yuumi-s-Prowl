@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mapPool:
   - {fileID: 3040890633578842797, guid: 7d892c9ae710aef42a30dca5a3465926, type: 3}
-  mapCount: 3
+  mapCount: 5
   allowDuplicates: 1
-  shopFloorIndices: 00000000
+  shopFloorIndices: 0100000003000000
   shopRerollCost: 25
   ballSpeedCurve:
     serializedVersion: 2

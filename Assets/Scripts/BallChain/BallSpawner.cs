@@ -12,6 +12,8 @@ namespace YuumisProwl.BallChain
     {
         [Header("References")]
         [SerializeField] private BallChainManager ballChainManager;
+        [Tooltip("Per-run stats. When assigned, ColorWeights bias which colors spawn.")]
+        [SerializeField] private YuumisProwl.Progression.RuntimeStats runtimeStats;
 
         [Header("Spawn Settings")]
         [Tooltip("How many balls to show in the intro animation. Remaining balls trickle in as tail spawns.")]
@@ -97,8 +99,7 @@ namespace YuumisProwl.BallChain
             int introCount = Mathf.Min(ballCount, totalBallsToSpawn);
             for (int i = 0; i < introCount; i++)
             {
-                BallColor color = BallColorUtils.GetRandomColor(colorCount, recentColors);
-                ballChainManager.SpawnBall(color);
+                ballChainManager.SpawnBall(PickColor());
                 ballsSpawned++;
             }
 
@@ -162,10 +163,20 @@ namespace YuumisProwl.BallChain
 
             if (ballChainManager.NeedsTailBall())
             {
-                BallColor color = BallColorUtils.GetRandomColor(colorCount, recentColors);
-                ballChainManager.SpawnBall(color);
+                ballChainManager.SpawnBall(PickColor());
                 ballsSpawned++;
             }
+        }
+
+        /// <summary>
+        /// Picks the next ball color — weighted by RuntimeStats.ColorWeights when assigned,
+        /// otherwise uniform. Both paths avoid 3-in-a-row runs.
+        /// </summary>
+        private BallColor PickColor()
+        {
+            if (runtimeStats != null)
+                return BallColorUtils.GetWeightedRandomColor(colorCount, recentColors, runtimeStats.ColorWeights);
+            return BallColorUtils.GetRandomColor(colorCount, recentColors);
         }
 
         public void SetColorCount(int count)

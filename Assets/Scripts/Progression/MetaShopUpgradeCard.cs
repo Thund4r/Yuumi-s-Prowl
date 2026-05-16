@@ -5,35 +5,32 @@ using TMPro;
 namespace YuumisProwl.Progression
 {
     /// <summary>
-    /// Single upgrade card in the meta shop. Displays progress bar, cost, and buy button.
+    /// Single upgrade card in the meta shop. Displays an UpgradeDefinition's rank
+    /// progress, current/next bonus, cost, and a buy button.
     /// </summary>
     public class MetaShopUpgradeCard : MonoBehaviour
     {
         [SerializeField] private Image iconImage;
         [SerializeField] private TextMeshProUGUI nameText;
         [SerializeField] private TextMeshProUGUI descriptionText;
-        [SerializeField] private TextMeshProUGUI levelText; // e.g. "Level 1/6"
-        [SerializeField] private TextMeshProUGUI bonusText; // e.g. "+5" or "×1.2"
-        [SerializeField] private Image progressBar;
+        [SerializeField] private TextMeshProUGUI levelText;   // e.g. "Level 2/6"
+        [SerializeField] private TextMeshProUGUI bonusText;   // e.g. "×1.20"
+        [SerializeField] private Image progressBar;           // fill image
         [SerializeField] private TextMeshProUGUI costText;
         [SerializeField] private Button buyButton;
         [SerializeField] private CanvasGroup buyButtonCanvasGroup;
 
-        private MetaUpgradeConfig upgradeConfig;
-        private MetaProgressionSettings metaProgressionSettings;
+        private UpgradeDefinition upgrade;
         private MetaShopUI parentShop;
 
-        public void Initialize(MetaUpgradeConfig config, MetaShopUI shop)
+        public void Initialize(UpgradeDefinition upgradeDef, MetaShopUI shop)
         {
-            upgradeConfig = config;
+            upgrade = upgradeDef;
             parentShop = shop;
-            metaProgressionSettings = shop.GetComponent<MetaShopUI>().GetMetaProgressionSettings();
 
-            nameText.text = config.upgradeName;
-            descriptionText.text = config.description;
-
-            if (config.icon != null)
-                iconImage.sprite = config.icon;
+            if (nameText != null) nameText.text = upgrade.UpgradeName;
+            if (descriptionText != null) descriptionText.text = upgrade.Description;
+            if (iconImage != null && upgrade.Icon != null) iconImage.sprite = upgrade.Icon;
 
             if (buyButton != null)
                 buyButton.onClick.AddListener(OnBuyButtonClicked);
@@ -43,88 +40,45 @@ namespace YuumisProwl.Progression
 
         public void RefreshDisplay()
         {
-            if (upgradeConfig == null || metaProgressionSettings == null)
+            if (upgrade == null || PlayerProfileManager.Profile == null)
                 return;
 
-            var profile = PlayerProfileManager.Profile;
-            if (profile == null)
-                return;
+            int rank = PlayerProfileManager.GetMetaRank(upgrade.UpgradeId); // -1 = none
+            int purchases = rank + 1;                                      // ranks owned
+            int nextPurchase = purchases;                                  // 0-based index of next
+            bool isMaxed = purchases >= upgrade.MaxRank;
 
-            var upgrade = PlayerProfileManager.GetOrCreateMetaUpgrade(upgradeConfig.upgradeId);
-            int currentRank = upgrade.rank;
-            int nextRank = currentRank + 1;
-            bool isMaxed = nextRank >= upgradeConfig.maxRanks;
+            if (levelText != null)
+                levelText.text = $"Level {purchases}/{upgrade.MaxRank}";
 
-            // Update level display
-            levelText.text = $"Level {currentRank + 1}/{upgradeConfig.maxRanks}";
-
-            // Update bonus display
             if (bonusText != null)
-            {
-                if (currentRank < 0)
-                {
-                    bonusText.text = "Not purchased";
-                }
-                else
-                {
-                    float bonusValue = metaProgressionSettings.GetUpgradeValue(upgradeConfig.upgradeId, currentRank);
+                bonusText.text = purchases > 0 ? upgrade.GetEffectSummary(purchases) : "Not purchased";
 
-                    // Format based on upgrade type
-                    if (upgradeConfig.upgradeId == "EssenceGain")
-                    {
-                        // Display as multiplier (e.g. "×1.2")
-                        bonusText.text = $"×{bonusValue:F2}";
-                    }
-                    else if (upgradeConfig.upgradeId == "BallSpeedReduction")
-                    {
-                        // Display as negative/reduction (e.g. "-10%")
-                        bonusText.text = $"{-bonusValue * 100:F1}%";
-                    }
-                    else if (upgradeConfig.upgradeId == "DraftReroll")
-                    {
-                        // Display as count (e.g. "1 reroll")
-                        int rerollCount = currentRank + 1;
-                        bonusText.text = $"{rerollCount} reroll{(rerollCount > 1 ? "s" : "")}";
-                    }
-                    else
-                    {
-                        // Additive bonus (e.g. "+5")
-                        bonusText.text = $"+{bonusValue:F2}";
-                    }
-                }
-            }
+            if (progressBar != null)
+                progressBar.fillAmount = upgrade.MaxRank > 0 ? purchases / (float)upgrade.MaxRank : 0f;
 
-            // Update progress bar
-            float progress = (currentRank + 1) / (float)upgradeConfig.maxRanks;
-            progressBar.fillAmount = progress;
-
-            // Update cost and button state
             if (isMaxed)
             {
-                costText.text = "MAXED";
-                buyButton.interactable = false;
-                if (buyButtonCanvasGroup != null)
-                    buyButtonCanvasGroup.alpha = 0.5f;
+                if (costText != null) costText.text = "MAXED";
+                if (buyButton != null) buyButton.interactable = false;
+                if (buyButtonCanvasGroup != null) buyButtonCanvasGroup.alpha = 0.5f;
             }
             else
             {
-                costText.text = $"Cost: {upgradeConfig.essenceCostPerRank}";
-                bool canAfford = profile.essenceTotal >= upgradeConfig.essenceCostPerRank;
-                buyButton.interactable = canAfford;
-                if (buyButtonCanvasGroup != null)
-                    buyButtonCanvasGroup.alpha = canAfford ? 1f : 0.6f;
+                int cost = upgrade.GetEssenceCost(nextPurchase);
+                if (costText != null) costText.text = $"Cost: {cost}";
+                bool canAfford = PlayerProfileManager.Profile.essenceTotal >= cost;
+                if (buyButton != null) buyButton.interactable = canAfford;
+                if (buyButtonCanvasGroup != null) buyButtonCanvasGroup.alpha = canAfford ? 1f : 0.6f;
             }
         }
 
         private void OnBuyButtonClicked()
         {
-            if (upgradeConfig == null)
-                return;
+            if (upgrade == null) return;
 
-            if (PlayerProfileManager.PurchaseUpgrade(upgradeConfig.upgradeId, metaProgressionSettings))
-            {
+            if (PlayerProfileManager.PurchaseUpgrade(upgrade))
                 parentShop.OnUpgradePurchased();
-            }
         }
 
         private void OnDestroy()

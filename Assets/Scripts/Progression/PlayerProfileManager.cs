@@ -209,41 +209,59 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
-        /// Purchases a meta upgrade rank. Returns true if successful, false if insufficient essence or at max rank.
+        /// Returns the saved rank of a meta upgrade (-1 = not purchased), looked up by ID.
+        /// Does not create an entry.
         /// </summary>
-        public static bool PurchaseUpgrade(string upgradeId, MetaProgressionSettings settings)
+        public static int GetMetaRank(string upgradeId)
         {
-            if (Profile == null || settings == null)
+            if (Profile == null || string.IsNullOrEmpty(upgradeId))
+                return -1;
+
+            foreach (var upgrade in Profile.metaUpgrades)
+            {
+                if (upgrade.upgradeId == upgradeId)
+                    return upgrade.rank;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// Purchases the next rank of a meta upgrade. Returns true on success,
+        /// false if the upgrade is maxed or the player can't afford it.
+        /// </summary>
+        public static bool PurchaseUpgrade(UpgradeDefinition upgrade)
+        {
+            if (Profile == null || upgrade == null)
                 return false;
 
-            var cfg = settings.GetUpgradeConfig(upgradeId);
-            if (cfg == null)
+            if (string.IsNullOrEmpty(upgrade.UpgradeId))
             {
-                Debug.LogError($"PlayerProfileManager: upgrade config not found for {upgradeId}");
+                Debug.LogError($"PlayerProfileManager: upgrade '{upgrade.UpgradeName}' has no UpgradeId — cannot purchase.");
                 return false;
             }
 
-            var upgrade = GetOrCreateMetaUpgrade(upgradeId);
-            int nextRank = upgrade.rank + 1;
+            var state = GetOrCreateMetaUpgrade(upgrade.UpgradeId);
+            int nextRank = state.rank + 1; // 0-based purchase index
 
-            if (nextRank >= cfg.maxRanks)
+            if (nextRank >= upgrade.MaxRank)
             {
-                Debug.LogWarning($"PlayerProfileManager: {upgradeId} already at max rank {cfg.maxRanks}");
+                Debug.LogWarning($"PlayerProfileManager: {upgrade.UpgradeId} already at max rank ({upgrade.MaxRank}).");
                 return false;
             }
 
-            if (Profile.essenceTotal < cfg.essenceCostPerRank)
+            int cost = upgrade.GetEssenceCost(nextRank);
+            if (Profile.essenceTotal < cost)
             {
-                Debug.LogWarning($"PlayerProfileManager: insufficient essence ({Profile.essenceTotal} < {cfg.essenceCostPerRank})");
+                Debug.LogWarning($"PlayerProfileManager: insufficient essence ({Profile.essenceTotal} < {cost}).");
                 return false;
             }
 
-            Profile.essenceTotal -= cfg.essenceCostPerRank;
-            Profile.essenceSpent += cfg.essenceCostPerRank;
-            upgrade.rank = nextRank;
+            Profile.essenceTotal -= cost;
+            Profile.essenceSpent += cost;
+            state.rank = nextRank;
 
             SaveProfile();
-            Debug.Log($"PlayerProfileManager: purchased {upgradeId} rank {nextRank + 1}. Essence remaining: {Profile.essenceTotal}");
+            Debug.Log($"PlayerProfileManager: purchased {upgrade.UpgradeId} rank {nextRank + 1}/{upgrade.MaxRank}. Essence remaining: {Profile.essenceTotal}");
             return true;
         }
 

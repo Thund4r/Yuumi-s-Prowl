@@ -94,6 +94,7 @@ Assets/Scripts/
   RunNode.cs
   RunState.cs
   RuntimeStats.cs
+  UpgradeDatabase.cs
   UpgradeDefinition.cs
   UpgradeDraftUI.cs
  Projectile/

@@ -54,9 +54,56 @@ namespace YuumisProwl.Progression
         [Tooltip("If true, the in-run shop offers a reroll button (cost defined in RunConfig).")]
         public bool ShopRerollEnabled;
 
+        [Header("Meta-driven (set by meta upgrades at run start)")]
+        [Tooltip("Multiplier on essence earned at run end (1.0 = no bonus).")]
+        public float EssenceGainMultiplier;
+        [Tooltip("Amount subtracted from the ball-speed multiplier each floor (0 = no reduction).")]
+        public float BallSpeedReduction;
+        [Tooltip("Number of free draft rerolls available per level draft.")]
+        public int DraftRerollCount;
+        [Tooltip("Gold the run begins with (RunState.gold is initialized to this at run start).")]
+        public int StartingGold;
+
+        [Header("Color Synergy")]
+        [Tooltip("Per-color spawn weight, indexed by BallColor. 1.0 = baseline; higher = more common. Rebuilt every run.")]
+        public float[] ColorWeights;
+        [Tooltip("Bonus gold granted each time a match of that color is destroyed, indexed by BallColor.")]
+        public int[] ColorMatchGold;
+
+        /// <summary>Number of entries in the BallColor enum.</summary>
+        private static readonly int ColorCount = System.Enum.GetValues(typeof(BallColor)).Length;
+
         private void Awake()
         {
             ResetToDefaults();
+        }
+
+        // --- Color synergy accessors (bounds-safe) ---
+
+        public float GetColorWeight(BallColor color)
+        {
+            int i = (int)color;
+            return (ColorWeights != null && i >= 0 && i < ColorWeights.Length) ? ColorWeights[i] : 1f;
+        }
+
+        public void AddColorWeight(BallColor color, float amount)
+        {
+            int i = (int)color;
+            if (ColorWeights != null && i >= 0 && i < ColorWeights.Length)
+                ColorWeights[i] = Mathf.Max(0f, ColorWeights[i] + amount);
+        }
+
+        public int GetColorMatchGold(BallColor color)
+        {
+            int i = (int)color;
+            return (ColorMatchGold != null && i >= 0 && i < ColorMatchGold.Length) ? ColorMatchGold[i] : 0;
+        }
+
+        public void AddColorMatchGold(BallColor color, int amount)
+        {
+            int i = (int)color;
+            if (ColorMatchGold != null && i >= 0 && i < ColorMatchGold.Length)
+                ColorMatchGold[i] += amount;
         }
 
         /// <summary>
@@ -70,6 +117,16 @@ namespace YuumisProwl.Progression
             GoldGainMultiplier = 1f;
             GoldPerCascade = 0;
             ShopRerollEnabled = false;
+            EssenceGainMultiplier = 1f;
+            BallSpeedReduction = 0f;
+            DraftRerollCount = 0;
+            StartingGold = 0;
+
+            // Rebuild color-synergy arrays — weights baseline 1.0, match-gold baseline 0.
+            ColorWeights = new float[ColorCount];
+            ColorMatchGold = new int[ColorCount];
+            for (int i = 0; i < ColorCount; i++)
+                ColorWeights[i] = 1f;
 
             if (defaults != null)
             {

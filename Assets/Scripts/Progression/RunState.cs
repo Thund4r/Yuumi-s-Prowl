@@ -25,11 +25,31 @@ namespace YuumisProwl.Progression
 
         /// <summary>
         /// Returns true if the player has already acquired this upgrade in this run.
-        /// Used to filter non-stackable upgrades from future drafts/shops.
         /// </summary>
         public bool HasUpgrade(UpgradeDefinition upgrade)
         {
             return upgrade != null && appliedUpgrades.Contains(upgrade);
+        }
+
+        /// <summary>
+        /// How many times this upgrade has been acquired in this run.
+        /// </summary>
+        public int CountUpgrade(UpgradeDefinition upgrade)
+        {
+            if (upgrade == null) return 0;
+            int count = 0;
+            for (int i = 0; i < appliedUpgrades.Count; i++)
+                if (appliedUpgrades[i] == upgrade) count++;
+            return count;
+        }
+
+        /// <summary>
+        /// True if this upgrade can still be offered/acquired this run — i.e. the player
+        /// hasn't already hit its MaxRank. Used to filter drafts and shop offerings.
+        /// </summary>
+        public bool CanAcquire(UpgradeDefinition upgrade)
+        {
+            return upgrade != null && CountUpgrade(upgrade) < upgrade.MaxRank;
         }
     }
 }

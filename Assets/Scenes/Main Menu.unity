@@ -420,8 +420,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 809, y: 483}
-  m_SizeDelta: {x: 200, y: 50}
+  m_AnchoredPosition: {x: 703, y: 483}
+  m_SizeDelta: {x: 400, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &317960808
 MonoBehaviour:
@@ -1567,7 +1567,8 @@ MonoBehaviour:
   upgradeCardsContainer: {fileID: 91264078}
   upgradeCardPrefab: {fileID: 7099091628593347920, guid: 899c2cae8a3f7fd41bbddd872b377418, type: 3}
   closeButton: {fileID: 874085136}
-  metaProgressionSettings: {fileID: 11400000, guid: 0f710c1c82d03574daff25b98b549b92, type: 2}
+  upgradeDatabase: {fileID: 11400000, guid: 58858971a6871ee4e98f55e4fc05d723, type: 2}
+  fadeDuration: 0.3
 --- !u!225 &1104470295
 CanvasGroup:
   m_ObjectHideFlags: 0

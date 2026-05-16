@@ -77,6 +77,7 @@ namespace YuumisProwl.BallChain
 
             ballChainManager.OnBallInserted += OnBallInserted;
             ballChainManager.OnSegmentsMerged += OnSegmentsMergedHandler;
+            ballChainManager.OnHammerDestroyed += HandleHammerDestroyed;
         }
 
         private void OnDestroy()
@@ -85,7 +86,17 @@ namespace YuumisProwl.BallChain
             {
                 ballChainManager.OnBallInserted -= OnBallInserted;
                 ballChainManager.OnSegmentsMerged -= OnSegmentsMergedHandler;
+                ballChainManager.OnHammerDestroyed -= HandleHammerDestroyed;
             }
+        }
+
+        /// <summary>
+        /// Runs the hammer recoil + cascade aftermath whenever a Hammer ball is destroyed,
+        /// regardless of what destroyed it (projectile, Pierce, Bomb, or a match).
+        /// </summary>
+        private void HandleHammerDestroyed(int hammerChainIndex, float recoilDistance)
+        {
+            ProcessHammerAftermath(hammerChainIndex, recoilDistance);
         }
 
         // --------------------------------------------------------------
@@ -378,10 +389,14 @@ namespace YuumisProwl.BallChain
 
         private IEnumerator HammerAftermathRoutine(int hammerOriginalChainIndex, float recoilDistance)
         {
-            // After the hammer was removed, the chain may have split. The chain index
-            // we were given now points to the ball that was directly behind the hammer
-            // (because indices shifted up by one after the removal).
-            ChainSegment backSeg = ballChainManager.GetSegmentForChainIndex(hammerOriginalChainIndex);
+            // After the hammer was removed, the chain may have split. The given index now
+            // points to the ball that was behind the hammer. A batch removal (Bomb / match)
+            // can shift indices a lot — clamp into the surviving chain's range.
+            int ballCount = ballChainManager.BallCount;
+            if (ballCount <= 0) yield break;
+            int idx = Mathf.Clamp(hammerOriginalChainIndex, 0, ballCount - 1);
+
+            ChainSegment backSeg = ballChainManager.GetSegmentForChainIndex(idx);
             if (backSeg == null) yield break;
 
             // Find the segment ahead of the back segment — this is the one that will
@@ -401,11 +416,21 @@ namespace YuumisProwl.BallChain
             // cascade detection when the gap closes. Count the hammer destruction as
             // one "match" so the final recoil calculation has a non-zero base.
             int currentSegId = frontSeg.id;
+
+            // If a sequence is already tracking this segment (e.g. the hammer was caught
+            // in an ongoing match), don't clobber it — that sequence's gap-close already
+            // handles cascade detection. Just recoil and exit.
+            if (sequencesById.ContainsKey(currentSegId))
+            {
+                yield return StartCoroutine(ApplyChainRecoil(recoilDistance, backSeg));
+                yield break;
+            }
+
             var sequenceState = new MatchSequenceState
             {
                 frontSegId = currentSegId,
                 matchCount = 1,
-                lastGapGlobalIndex = hammerOriginalChainIndex,
+                lastGapGlobalIndex = idx,
             };
             sequencesById[currentSegId] = sequenceState;
 

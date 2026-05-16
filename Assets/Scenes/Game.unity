@@ -673,7 +673,6 @@ RectTransform:
   - {fileID: 83767684}
   - {fileID: 1438395834}
   - {fileID: 1773983994}
-  - {fileID: 2084912504}
   - {fileID: 1795216958}
   m_Father: {fileID: 1233497954}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -6227,11 +6226,7 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   metaProgressionSettings: {fileID: 11400000, guid: 0f710c1c82d03574daff25b98b549b92, type: 2}
   matchEffectPlayer: {fileID: 1350675960}
-  upgradePool:
-  - {fileID: 11400000, guid: 9b99e4ec12b34474c960f3cb421e450d, type: 2}
-  - {fileID: 11400000, guid: 2974cb1b0c23f144dbd358a089004023, type: 2}
-  - {fileID: 11400000, guid: b35105b1bf267424d9b969e3d63bc4eb, type: 2}
-  - {fileID: 11400000, guid: 5ecf96bc0d95f98409e39bb2a56846b5, type: 2}
+  upgradeDatabase: {fileID: 11400000, guid: 58858971a6871ee4e98f55e4fc05d723, type: 2}
   mainMenuScene: Main Menu
   pauseBeforeReturn: 1.5
 --- !u!4 &1295330461
@@ -6275,6 +6270,12 @@ MonoBehaviour:
   GoldGainMultiplier: 0
   GoldPerCascade: 0
   ShopRerollEnabled: 0
+  EssenceGainMultiplier: 0
+  BallSpeedReduction: 0
+  DraftRerollCount: 0
+  StartingGold: 0
+  ColorWeights: []
+  ColorMatchGold: 
 --- !u!1 &1298458307
 GameObject:
   m_ObjectHideFlags: 0
@@ -8433,6 +8434,7 @@ RectTransform:
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1011348626}
+  - {fileID: 2084912504}
   m_Father: {fileID: 183721279}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -8798,6 +8800,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   ballChainManager: {fileID: 1842243456}
+  runtimeStats: {fileID: 1295330462}
   ballCount: 60
   colorCount: 2
   totalBallsToSpawn: 50
@@ -10423,11 +10426,11 @@ RectTransform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 183721279}
+  m_Father: {fileID: 1773983994}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -298}
+  m_AnchoredPosition: {x: 0, y: 31.99997}
   m_SizeDelta: {x: 200, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &2114031614

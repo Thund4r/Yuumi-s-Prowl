@@ -55,6 +55,14 @@ namespace YuumisProwl.BallChain
         ///   segment's lead ball landed. Useful for detecting cascade matches at the seam.
         /// </summary>
         public System.Action<int, int> OnSegmentsMerged;
+        /// <summary>
+        /// Fired whenever a Hammer power-up ball is removed from the chain — by any means
+        /// (projectile, Pierce, Bomb, or a match). Parameters:
+        ///   globalChainIndex — the index the hammer occupied (captured pre-removal).
+        ///   recoilDistance — the hammer's recoil distance (PowerUpValue).
+        /// MatchProcessor listens to this to run the hammer recoil + cascade aftermath.
+        /// </summary>
+        public System.Action<int, float> OnHammerDestroyed;
 
         private List<ChainSegment> segments = new List<ChainSegment>();
         private ObjectPool<Ball> ballPool;
@@ -479,6 +487,22 @@ namespace YuumisProwl.BallChain
         {
             if (nodesToRemove == null || nodesToRemove.Count == 0) return;
 
+            // Capture hammer info before the balls are recycled. Only one hammer can
+            // exist at a time, so the first match in the batch is enough.
+            bool hammerRemoved = false;
+            int hammerIndex = -1;
+            float hammerRecoil = 0f;
+            foreach (var node in nodesToRemove)
+            {
+                if (node.ball != null && node.ball.PowerUpType == BallPowerUpType.Hammer)
+                {
+                    hammerRemoved = true;
+                    hammerIndex = GlobalIndexOf(node);
+                    hammerRecoil = node.ball.PowerUpValue;
+                    break;
+                }
+            }
+
             // Group removals by segment
             var bySegment = new Dictionary<int, List<BallNode>>();
             foreach (var node in nodesToRemove)
@@ -510,6 +534,9 @@ namespace YuumisProwl.BallChain
             SplitSegmentsAtGaps();
             PruneEmptySegments();
             UpdateChainIndices();
+
+            if (hammerRemoved)
+                OnHammerDestroyed?.Invoke(hammerIndex, hammerRecoil);
         }
 
         /// <summary>
@@ -523,6 +550,10 @@ namespace YuumisProwl.BallChain
             ChainSegment seg = GetSegmentById(node.segmentId);
             if (seg == null) return;
 
+            // Capture hammer info before the ball is recycled.
+            bool hammerRemoved = node.ball != null && node.ball.PowerUpType == BallPowerUpType.Hammer;
+            float hammerRecoil = hammerRemoved ? node.ball.PowerUpValue : 0f;
+
             if (node.ball != null)
             {
                 ballPool.Return(node.ball);
@@ -533,6 +564,9 @@ namespace YuumisProwl.BallChain
             SplitSegmentsAtGaps();
             PruneEmptySegments();
             UpdateChainIndices();
+
+            if (hammerRemoved)
+                OnHammerDestroyed?.Invoke(globalChainIndex, hammerRecoil);
         }
 
         /// <summary>

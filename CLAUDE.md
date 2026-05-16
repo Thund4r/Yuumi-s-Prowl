@@ -98,7 +98,8 @@ The chain is internally one or more **`ChainSegment`s** (contiguous runs of ball
   4. Once the front segment is back-most (all gaps closed), apply a `SmoothStep` recoil to the merged segment.
   - Concurrent sequences are supported: matches that happen mid-gap-closing share the sequence keyed by `segmentId` (see `sequencesById`).
   - Events: `OnBallsDestroyed(int, BallColor)` (for charge tracking), `OnChainCleared`, `OnMatchSequenceComplete(cascadeCount, lastGapGlobalIndex)`, **`OnMatchVisual(List<Vector3> positions, BallColor, int cascadeIndex)`** (fired *before* `RemoveBalls`, used by `MatchEffectPlayer`).
-  - Public power-up entry points: `ApplyChainRecoil(float, ChainSegment)`, `TriggerRecoil(float, ChainSegment)`, `TriggerRecoil(float, int globalChainIndex = -1)`, `ProcessPierceAftermath(int)`.
+  - Public power-up entry points: `ApplyChainRecoil(float, ChainSegment)`, `TriggerRecoil(float, ChainSegment)`, `TriggerRecoil(float, int globalChainIndex = -1)`, `ProcessPierceAftermath(int)`, `ProcessHammerAftermath(int, float)`.
+  - **Hammer trigger is event-driven:** `BallChainManager` fires `OnHammerDestroyed(globalChainIndex, recoilDistance)` whenever a Hammer ball leaves the chain by *any* means (projectile, Pierce, Bomb, or a match). `MatchProcessor` subscribes and runs `ProcessHammerAftermath` — the recoil + gap-close cascade aftermath. The projectile no longer calls the recoil directly; it just removes the hammer ball.
 - `BallColorUtils` — single source of `ToUnityColor(BallColor)` used everywhere that needs the on-screen color.
 
 ### Projectile System
@@ -148,21 +149,30 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
 - `RunState` — in-memory run state: `RunNode[]`, `currentNodeIndex`, `gold`, `appliedUpgrades[]`. Discarded at run end; meta persistence lives in `PlayerProfile`.
 - `RunNode` / `RunNodeType` — defines one step in a run: `Gameplay` (load a map) or `Shop` (stubbed for step 6).
 - `RuntimeStats` (MonoBehaviour) — mutable per-run wrapper for tunables: `YuumiRotationSpeed`, `ChargePerBallDestroyed`, `CascadeBonusCharge`, `ChargeThreshold`, `PierceMaxDistance`, `PierceSpeedMultiplier`, `PierceWidthMultiplier`, `BombRadius`, `HammerRecoilDistance`. `ResetToDefaults()` copies baselines from `PowerUpSettings`. Consumed by `YuumiController`, `PowerUpChargeTracker`, `ProjectileSpawner`, etc. with null-safe fallbacks.
-- `UpgradeDefinition` (ScriptableObject) — defines an in-run upgrade: `UpgradeStat` (enum: `YuumiRotationSpeed`, `ChargePerBall`, `PierceWidth`, `BombRadius`, `GoldGainBonus`, `GoldPerCascade`, `ShopReroll`), `ModifierValue` (applied as multiplicative for speed/width, additive for charge/radius/gold), `UpgradeName`, `Description`, `Icon`. Has tags: `IsDraftable` (appears in end-of-level draft), `IsShoppable` (appears in in-run shop), `IsStackable` (can be acquired multiple times per run). `ShopCost` defines gold cost in shop. `Apply(RuntimeStats)` mutates the stat. Create via **Yuumi → Upgrade Definition** context menu.
-- `UpgradeDraftUI` — displays 3 random upgrade choices after a level win (except final node). Shows icon, name, description per option. Fades in/out and fires a callback on selection so `RunManager` can apply and advance.
-- Draft flow: `GameManager.OnGameWon` → `RunManager.HandleNodeWon()` → if not last node, call `UpgradeDraftUI.Show(options, callback)` → `RunManager.HandleUpgradeSelected(upgrade)` → apply to `RuntimeStats` → `AdvanceToNextNode()` → load next map.
-- `InRunShopUI` / `InRunShopUpgradeCard` — in-run shop screen shown at Shop nodes. Card slots are placed manually in the scene and wired into `InRunShopUI.upgradeCards[]`; the slot count (`CardSlotCount`) is the shop size. The shop populates slots with upgrades drawn from the `IsShoppable` pool (each with a gold cost) via `InRunShopUpgradeCard.SetUpgrade`; unused slots are emptied via `Clear()`. The entire card is the buy button (a `Button` on the card root) — clicking it purchases the upgrade with gold from `RunState.gold`. Shop reroll button visible only if player has the `ShopReroll` upgrade; each reroll costs `RunConfig.shopRerollCost` gold. Continue button proceeds to next node.
+- `UpgradeDefinition` (ScriptableObject) — **the single upgrade type** used by drafts, the in-run shop, AND the meta shop. Fields: `UpgradeId` (stable string, save key for meta upgrades), `UpgradeStat` enum (`YuumiRotationSpeed`, `ChargePerBall`, `PierceWidth`, `BombRadius`, `GoldGainBonus`, `GoldPerCascade`, `ShopReroll`, `EssenceGain`, `BallSpeedReduction`, `DraftReroll`, `StartingGold`, `ColorWeight`, `ColorMatchGold`), `TargetColor` (`BallColor` — used only by the color stats), `ModifierValue` (flat per-rank delta — see below), `UpgradeName`/`Description`/`Icon`. Availability flags: `IsDraftable`, `IsShoppable`, `IsMetaShop`. `MaxRank` — max times acquirable (1 = non-stackable); `IsStackable` is `MaxRank > 1`. Costs: `ShopCost` (gold), `RankEssenceCosts[]` (per-rank essence cost for the meta shop). `Apply(RuntimeStats, count)` adds `ModifierValue × count` to the stat — **all stats scale linearly, no compounding**. Multiplier-type stats (PierceWidth, GoldGainBonus, EssenceGain) have RuntimeStats fields that start at 1.0, so `ModifierValue 0.2` = +20% per rank. `GetEffectSummary(count)` formats the cumulative bonus for UI. Create via **Yuumi → Upgrade Definition**.
+- `UpgradeDraftUI` — displays 3 random upgrade choices after a level win (except final node). Fades in/out, fires a callback on selection. Reroll button uses `RuntimeStats.DraftRerollCount`.
+- Draft flow: `GameManager.OnGameWon` → `RunManager.HandleNodeWon()` → if not last node, call `UpgradeDraftUI.Show(options, callback)` → `RunManager.HandleUpgradeSelected(upgrade)` → `Apply` to `RuntimeStats` → `AdvanceToNextNode()` → load next map.
+- `InRunShopUI` / `InRunShopUpgradeCard` — in-run shop screen shown at Shop nodes. Card slots are placed manually in the scene and wired into `InRunShopUI.upgradeCards[]`; the slot count (`CardSlotCount`) is the shop size. The shop populates slots with upgrades drawn from the `IsShoppable` pool via `InRunShopUpgradeCard.SetUpgrade`; unused slots are emptied via `Clear()`. The entire card is the buy button — clicking it purchases the upgrade with gold from `RunState.gold`. Shop reroll button visible only if `RuntimeStats.ShopRerollEnabled` (the `ShopReroll` draft upgrade); each reroll costs `RunConfig.shopRerollCost` gold. Continue button proceeds to next node.
+- Gold: `RunState.gold` is purely in-memory (never saved to disk). `RunManager.StartNewRun()` explicitly sets it to `RuntimeStats.StartingGold` (0 by default; a `StartingGold` upgrade raises it) so gold never carries between runs.
 - Gold rewards: flat per-floor (`RunConfig.baseGoldPerFloor × RuntimeStats.GoldGainMultiplier`) granted in `HandleNodeWon` — does not scale with depth or difficulty; per-cascade bonus (`RunConfig.goldPerCascadeBonus + RuntimeStats.GoldPerCascade`) granted via `MatchProcessor.OnMatchSequenceComplete` for each cascade beyond the first match. When cascade gold is earned, `RunManager` calls `MatchEffectPlayer.ShowGoldPopup` to display a floating "+N Gold" popup at the last match centroid.
 - Shop floor placement: `RunConfig.shopFloorIndices[]` lists 0-based gameplay floor indices after which a shop node is inserted. E.g., `[2, 5]` = shop after the 3rd and 6th gameplay floor.
-- Non-stackable upgrades: tracked in `RunState.appliedUpgrades`. Non-stackable upgrades that are already acquired are filtered out of future draft and shop offerings via `RunState.HasUpgrade()`.
+- Upgrade acquisition limits: `RunState.appliedUpgrades` records every acquired upgrade. `RunState.CanAcquire(upgrade)` returns true while the run's acquired count is below `MaxRank`; `RunManager` filters draft/shop offerings through it, so a non-stackable (`MaxRank 1`) upgrade can't be offered twice.
 
 ### Meta Progression
-- `MetaProgressionSettings` (ScriptableObject) — tunable configuration for post-run rewards: `baseEssencePerFloor`, `essenceDepthCurve` (multiplier based on run depth), `essenceDifficultyScaling` (bool; if true, multiplies by ballSpeed×totalBalls), and meta upgrade caps (`chargePerBallMetaCap`, `essenceGainCapMultiplier`). Create via **Yuumi → Meta Progression Settings**.
-- `PlayerProfile` — serializable persistent player data: `essenceTotal`, `essenceSpent`, `metaUpgrades[]` (array of `MetaUpgradeState`). Currently tracks: Charge Per Ball (additive, capped) and Essence Gain (multiplicative, capped). Discarded/loaded by `PlayerProfileManager`.
-- `PlayerProfileManager` (MonoBehaviour, DontDestroyOnLoad) — singleton managing save/load. Loads profile from JSON in `persistentDataPath` on Awake. `GrantEssence(int)` credits the player and saves. `GetOrCreateMetaUpgrade(upgradeId)` initializes or returns a meta upgrade state. Flow: `RunManager.EndRun()` → `GrantEssenceReward()` (calculates based on floors, difficulty, meta bonuses) → `PlayerProfileManager.GrantEssence()` → saves to disk.
-- Meta upgrade application: `RunManager.StartNewRun()` → `ApplyMetaUpgradesToRunStats()` reads `PlayerProfileManager.Profile.metaUpgrades[]` and mutates `RuntimeStats` before the run starts. Ball Speed Reduction is applied to `ballSpeedMult` in `LoadCurrentNode`. Essence Gain multiplier is applied during essence reward calculation. Draft Reroll count is accessible via `GetDraftRerollCount()`.
-- `MetaShopUI` — displays the meta shop screen (player essence balance + 4 upgrades). Dynamically instantiates `MetaShopUpgradeCard` for each upgrade in `MetaProgressionSettings`. Fades in/out on show/hide. Wired to a button on the main menu.
-- `MetaShopUpgradeCard` — individual upgrade card showing: icon, name, description, progress bar (current rank / max ranks), cost of next rank, buy button (disabled if maxed or insufficient essence). Calls `PlayerProfileManager.PurchaseUpgrade()` on purchase.
+- Meta upgrades are **ordinary `UpgradeDefinition` assets** with `IsMetaShop` enabled — there is no separate meta-upgrade type. They need a unique stable `UpgradeId` (the save key) and a `RankEssenceCosts[]` array (distinct cost per rank).
+- `MetaProgressionSettings` (ScriptableObject) — tunes only the **essence reward**: `baseEssencePerFloor`, `essenceDepthCurve`, `essenceDifficultyScaling`. Create via **Yuumi → Meta Progression Settings**.
+- `PlayerProfile` — serializable persistent data: `essenceTotal`, `essenceSpent`, `metaUpgrades[]` (`MetaUpgradeState` = `upgradeId` + 0-based `rank`, -1 = unpurchased).
+- `PlayerProfileManager` (MonoBehaviour, DontDestroyOnLoad) — save/load (JSON in `persistentDataPath`, with corrupt-file backup + sanitization). `GrantEssence(int)`, `GetMetaRank(id)`, `PurchaseUpgrade(UpgradeDefinition)` (charges `GetEssenceCost(nextRank)`, caps at `MaxRank`).
+- Meta upgrade application: `RunManager.StartNewRun()` → `ApplyMetaUpgradesToRunStats()` matches each saved `metaUpgrades` entry to an `UpgradeDefinition` in the `UpgradeDatabase` by `UpgradeId` and calls `Apply(runtimeStats, rank + 1)`. Everything funnels through `RuntimeStats` — `BallSpeedReduction`, `EssenceGainMultiplier`, and `DraftRerollCount` are RuntimeStats fields read by `RunManager` during the run.
+- `UpgradeDatabase` (ScriptableObject) — the **single master list** of every `UpgradeDefinition`. Both `RunManager` and `MetaShopUI` reference one shared database asset (they live in different scenes). `RunManager` filters it by `IsDraftable`/`IsShoppable` and looks up meta upgrades by `UpgradeId`; `MetaShopUI` calls `GetMetaShopUpgrades()` for everything flagged `IsMetaShop`. Register an upgrade here once instead of wiring it into multiple scene objects. Create via **Yuumi → Upgrade Database**.
+- `MetaShopUI` — main-menu shop. Reads meta upgrades from the shared `UpgradeDatabase` (`GetMetaShopUpgrades()`), instantiates a `MetaShopUpgradeCard` per upgrade; fades in/out on show/hide. `MetaShopUpgradeCard` shows icon, name, description, rank progress bar, `GetEffectSummary` bonus, next-rank cost; buy button (disabled if maxed or unaffordable) calls `PlayerProfileManager.PurchaseUpgrade`.
+
+### Color Synergy
+- Per-run, per-color tunables live in `RuntimeStats`: `ColorWeights[]` (spawn-weight per `BallColor`, baseline 1.0) and `ColorMatchGold[]` (bonus gold per match of that color, baseline 0). Both arrays are rebuilt by `ResetToDefaults()` each run; access them via the bounds-safe `GetColorWeight`/`AddColorWeight`/`GetColorMatchGold`/`AddColorMatchGold` helpers.
+- **Color weighting:** `BallColorUtils.GetWeightedRandomColor` (run-avoidance, used by `BallSpawner`) and `PickWeightedColor` (no history, used by `ProjectileSpawner`) bias color choice by a weights array. Both spawners use `RuntimeStats.ColorWeights` when a `RuntimeStats` reference is assigned, else fall back to uniform random. So projectile colors lean the same way as the chain.
+- **Color-match gold:** `RunManager.HandleBallsDestroyed` (subscribed to `MatchProcessor.OnBallsDestroyed`) grants `RuntimeStats.GetColorMatchGold(color)` each time a match of that color is destroyed.
+- **Delivery:** color synergies are in-run `UpgradeDefinition`s — `ColorWeight` and `ColorMatchGold` stats, with the `TargetColor` field selecting which color. Mark them `IsDraftable`/`IsShoppable` (not meta).
+- Not yet built: red mini-explosions, blue icicles, "dead balls" — deferred until the tracking projectile (Step 8) exists, since the icicle reuses tracking. Hook points: `MatchProcessor.OnMatchVisual`/`OnBallsDestroyed` carry the matched color + positions.
 
 ---
 
@@ -208,12 +218,12 @@ Assets/
 │   │   ├── RunState.cs                 ← in-run mutable state
 │   │   ├── RunNode.cs                  ← defines a run step (Gameplay or Shop)
 │   │   ├── RuntimeStats.cs             ← per-run mutable stats wrapper
-│   │   ├── UpgradeDefinition.cs        ← defines an in-run upgrade (tags, costs, stacking)
+│   │   ├── UpgradeDefinition.cs        ← single upgrade type (draft / shop / meta)
+│   │   ├── UpgradeDatabase.cs          ← shared master list of all upgrades
 │   │   ├── UpgradeDraftUI.cs           ← UI for selecting upgrades after wins
 │   │   ├── InRunShopUI.cs              ← in-run shop screen controller
 │   │   ├── InRunShopUpgradeCard.cs     ← single shop upgrade card with buy button
-│   │   ├── MetaProgressionSettings.cs  ← tuning for essence rewards + meta upgrades
-│   │   ├── MetaUpgradeConfig.cs        ← (nested in MetaProgressionSettings) defines cost, ranks, progression
+│   │   ├── MetaProgressionSettings.cs  ← tuning for essence rewards
 │   │   ├── PlayerProfile.cs            ← serializable persistent player data
 │   │   ├── PlayerProfileManager.cs     ← save/load + essence grant + upgrade purchase
 │   │   ├── MetaShopUI.cs               ← main meta shop screen controller
@@ -308,19 +318,25 @@ All input handling uses `#if UNITY_EDITOR || UNITY_STANDALONE` / `#else` guards 
 3. If you don't want a particular system tinted by the match color, uncheck **Tint Particles** on that prefab (it's all-or-nothing currently — split into multiple prefabs if you need mixed behavior).
 4. Make sure `effectDuration` (on the prefab) is ≥ the longest-lived particle's lifetime but ≤ `MatchEffectPlayer.ReturnEffectAfter`'s wait (currently 1.2s).
 
-### Create an in-run upgrade
+### Create an upgrade (draft, shop, or meta)
+All three contexts use one `UpgradeDefinition` asset type.
 1. Right-click in `Assets/Data/` → **Yuumi → Upgrade Definition**. Name it e.g. `Upgrade_RotationSpeed`.
-2. Set **Upgrade Name**, **Description**, optional **Icon**, and **Modifier Value**.
-   - For *multiplicative* upgrades (Speed, Width), use values like `1.2` (20% increase) or `1.5` (50% increase).
-   - For *additive* upgrades (Charge, Bomb Radius), use raw deltas like `2` or `0.5`.
-3. Set **Stat** (the enum selecting which stat to modify: `YuumiRotationSpeed`, `ChargePerBall`, `PierceWidth`, or `BombRadius`).
-4. Add the asset to **RunManager**'s **Upgrade Pool** array in the inspector (the pool to draft from each level).
+2. Set **Upgrade Id** (a stable unique string — required for meta upgrades, used as the save key), **Upgrade Name**, **Description**, optional **Icon**, and **Modifier Value**.
+   - **Modifier Value is a flat per-rank delta.** Total effect at max rank = `ModifierValue × MaxRank`. No compounding.
+   - *Multiplier* stats (PierceWidth, GoldGainBonus, EssenceGain) — their RuntimeStats field starts at `1.0`, so `0.2` = +20% per rank.
+   - *Raw* stats (RotationSpeed, ChargePerBall, BombRadius, GoldPerCascade, BallSpeedReduction, DraftReroll) — raw delta per rank (e.g. RotationSpeed `+50` deg/s per rank).
+   - *Flag* stats (ShopReroll) — ModifierValue ignored.
+3. Set **Stat** — the enum selecting which stat to modify.
+4. Set availability flags: **Is Draftable** (end-of-level draft), **Is Shoppable** (in-run gold shop), **Is Meta Shop** (main-menu essence shop). Any combination is allowed.
+5. Set **Max Rank** (1 = non-stackable; higher = stackable/ranked).
+6. Set costs: **Shop Cost** (gold, for shoppable upgrades), **Rank Essence Costs** (one entry per rank, for meta upgrades — array length should equal Max Rank).
+7. Add the asset to the **UpgradeDatabase** asset's **All Upgrades** list — that's the only place to register it. `RunManager` and `MetaShopUI` both read from the shared database, so no per-scene wiring is needed.
 
 ---
 
 ## Not Yet Implemented
 
-- **Step 7:** Color synergy infrastructure (color weights, match hooks).
+- **Step 7 (extended):** advanced color synergies — red mini-explosions, blue icicles, "dead balls". Infrastructure (color weighting + color-match gold) is done; these effect-heavy synergies are deferred until Step 8's tracking exists.
 - **Step 8:** Fire-and-forget homing: projectile auto-targets nearby color matches after launch.
 - Slay-the-Spire-style branching map UI (player chooses path between nodes — currently shop nodes are at fixed positions).
 - Per-map intro animations (Animator hook designed but not built — would live on each Map prefab and be played by `LevelManager.LoadMapRoutine` before `BallSpawner.StartLevel`).

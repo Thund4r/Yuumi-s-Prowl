@@ -267,8 +267,11 @@ namespace YuumisProwl.Projectile
             if (randomColors)
             {
                 int maxColors = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
-                int colorIndex = Random.Range(0, maxColors);
-                return (BallColor)colorIndex;
+                // Bias projectile colors by the same per-run ColorWeights as the chain,
+                // so a "more common" color is also more likely to be loaded.
+                if (runtimeStats != null)
+                    return BallColorUtils.PickWeightedColor(maxColors, runtimeStats.ColorWeights);
+                return (BallColor)Random.Range(0, maxColors);
             }
             return fixedColor;
         }

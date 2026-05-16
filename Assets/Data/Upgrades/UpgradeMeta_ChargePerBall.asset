@@ -10,14 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
-  m_Name: Upgrade_ChargePerBall
+  m_Name: UpgradeMeta_ChargePerBall
   m_EditorClassIdentifier: 
+  <UpgradeId>k__BackingField: ChargePerBall
   <Stat>k__BackingField: 1
   <UpgradeName>k__BackingField: Charge Efficiency
-  <Description>k__BackingField: +2 Charge per ball
+  <Description>k__BackingField: Increase the acmount of powerup charge gained per
+    ball
   <Icon>k__BackingField: {fileID: 0}
-  <ModifierValue>k__BackingField: 2
-  <IsDraftable>k__BackingField: 1
-  <IsShoppable>k__BackingField: 1
-  <IsStackable>k__BackingField: 1
-  <ShopCost>k__BackingField: 100
+  <ModifierValue>k__BackingField: 0.25
+  <IsDraftable>k__BackingField: 0
+  <IsShoppable>k__BackingField: 0
+  <IsMetaShop>k__BackingField: 1
+  <MaxRank>k__BackingField: 8
+  <ShopCost>k__BackingField: 0
+  <RankEssenceCosts>k__BackingField: 320000003c00000046000000500000005a000000640000006e00000078000000
