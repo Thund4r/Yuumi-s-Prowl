@@ -371,11 +371,13 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
-        /// An upgrade is "available" if it hasn't yet been acquired up to its MaxRank this run.
+        /// An upgrade is "available" if it hasn't been acquired up to its MaxRank this run
+        /// AND all of its prerequisite upgrades are already owned.
         /// </summary>
         private bool IsAvailable(UpgradeDefinition upgrade)
         {
-            return state == null || state.CanAcquire(upgrade);
+            if (state == null) return true;
+            return state.CanAcquire(upgrade) && upgrade.ArePrerequisitesMet(state);
         }
 
         private UpgradeDefinition[] PickFilteredUpgrades(int count, System.Func<UpgradeDefinition, bool> predicate)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using YuumisProwl;
@@ -47,8 +48,15 @@ namespace YuumisProwl.Projectile
         private float lastSpawnTime;
         private BallColor nextColor;
         private Projectile currentProjectile;
-        private Projectile inFlightProjectile;
-        private bool projectileInFlight = false;
+        // All projectiles currently in flight. With loose homing the player can have
+        // many at once; without it the list holds at most one.
+        private readonly List<Projectile> inFlightProjectiles = new List<Projectile>(8);
+
+        /// <summary>
+        /// Multi-fire mode: when loose homing is unlocked, the player can fire without
+        /// waiting for the previous projectile to land.
+        /// </summary>
+        private bool MultiFireEnabled => runtimeStats != null && runtimeStats.HomingLooseEnabled;
 
         private void Awake()
         {
@@ -212,8 +220,10 @@ namespace YuumisProwl.Projectile
             // processor supports concurrent sequences, so a projectile-induced match in any
             // segment will be processed even while another sequence is still in progress.
 
-            // Prevent firing if a projectile is already in flight
-            if (projectileInFlight) return;
+            // Single-fire mode: gate on whether any projectile is in flight.
+            // Multi-fire (loose homing): allow firing regardless of in-flight count —
+            // the cooldown above is the only rate limit.
+            if (!MultiFireEnabled && inFlightProjectiles.Count > 0) return;
 
             Projectile launched = currentProjectile;
             lastSpawnTime = Time.time;
@@ -224,16 +234,31 @@ namespace YuumisProwl.Projectile
             if (powerUpInventory != null && powerUpInventory.EquippedPowerUp != PowerUpType.None)
                 powerUpInventory.ConsumeEquipped();
 
+            // Refresh homing config from RuntimeStats — this projectile may have been
+            // spawned before the player drafted a homing upgrade, in which case its
+            // SetHoming-at-spawn values are stale.
+            if (runtimeStats != null)
+            {
+                launched.SetHoming(
+                    runtimeStats.HomingStrictEnabled,
+                    runtimeStats.HomingLooseEnabled,
+                    runtimeStats.HomingRange);
+            }
+
             launched.Launch(targetWorldPos);
 
             // If the projectile completed instantly (e.g. Pierce), ReturnProjectile
-            // was already called during Launch, which reset projectileInFlight and
-            // spawned the next projectile. Don't override that state.
+            // already ran during Launch and respawned the next projectile. Don't override.
             if (currentProjectile == launched)
             {
-                projectileInFlight = true;
-                inFlightProjectile = launched;
+                inFlightProjectiles.Add(launched);
                 currentProjectile = null;
+
+                // Multi-fire: immediately ready the next projectile so the player can
+                // keep shooting. Single-fire: defer to ReturnProjectile when the in-flight
+                // one returns (preserves the existing "one at a time" feel).
+                if (MultiFireEnabled)
+                    SpawnNextProjectile();
             }
 
             OnShot?.Invoke();
@@ -257,6 +282,19 @@ namespace YuumisProwl.Projectile
             // If a power-up is already equipped (e.g. equipped while a prior shot was
             // in flight), apply it to this freshly-loaded projectile.
             ApplyEquippedPowerUp(currentProjectile);
+
+            // Pass per-run homing config from RuntimeStats — disabled by default.
+            if (runtimeStats != null)
+            {
+                currentProjectile.SetHoming(
+                    runtimeStats.HomingStrictEnabled,
+                    runtimeStats.HomingLooseEnabled,
+                    runtimeStats.HomingRange);
+            }
+            else
+            {
+                currentProjectile.SetHoming(false, false, 0f);
+            }
         }
 
         /// <summary>
@@ -282,17 +320,27 @@ namespace YuumisProwl.Projectile
         /// </summary>
         public void ReturnProjectile(Projectile projectile)
         {
-            if (projectile != null)
-            {
-                projectilePool.Return(projectile);
-                projectile.OnReturnToPool();
+            if (projectile == null) return;
 
-                if (projectile == inFlightProjectile) inFlightProjectile = null;
+            bool wasInFlight = inFlightProjectiles.Remove(projectile);
+            // Instant power-ups (Pierce) call this during Launch, before TryLaunchProjectile
+            // has moved the projectile into the in-flight list — so it's still currentProjectile.
+            bool wasCurrent = currentProjectile == projectile;
 
-                // Mark that the projectile is no longer in flight and prepare the next one
-                projectileInFlight = false;
+            // If the projectile is neither tracked as in-flight nor as the loaded one, it
+            // has already been handled (e.g. ClearActiveProjectiles raced an instant-Pierce
+            // return on level-end). Ignore — returning it again would double-pool it.
+            if (!wasInFlight && !wasCurrent) return;
+
+            projectilePool.Return(projectile);
+            projectile.OnReturnToPool();
+
+            if (wasCurrent) currentProjectile = null;
+
+            // Refill if nothing is loaded. Single-fire: this is the refill moment.
+            // Multi-fire: SpawnNextProjectile already ran at launch, so this is a no-op.
+            if (currentProjectile == null)
                 SpawnNextProjectile();
-            }
         }
 
         /// <summary>
@@ -302,13 +350,15 @@ namespace YuumisProwl.Projectile
         /// </summary>
         public void ClearActiveProjectiles()
         {
-            if (inFlightProjectile != null)
+            // Return every in-flight projectile (multi-fire can have several at once).
+            for (int i = 0; i < inFlightProjectiles.Count; i++)
             {
-                projectilePool.Return(inFlightProjectile);
-                inFlightProjectile.OnReturnToPool();
-                inFlightProjectile = null;
+                var p = inFlightProjectiles[i];
+                if (p == null) continue;
+                projectilePool.Return(p);
+                p.OnReturnToPool();
             }
-            projectileInFlight = false;
+            inFlightProjectiles.Clear();
 
             if (currentProjectile != null)
             {

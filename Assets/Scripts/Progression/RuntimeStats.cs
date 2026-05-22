@@ -27,6 +27,9 @@ namespace YuumisProwl.Progression
         [Tooltip("Default Yuumi rotation speed before upgrades. Should match YuumiController's serialized rotationSpeed.")]
         [SerializeField] private float yuumiRotationSpeedDefault = 720f;
 
+        [Tooltip("Default homing detection radius (world units) before upgrades. Used whenever a homing flag is taken without HomingRange upgrades.")]
+        [SerializeField] private float homingRangeBaseline = 5f;
+
         [Header("Yuumi")]
         public float YuumiRotationSpeed;
 
@@ -69,6 +72,14 @@ namespace YuumisProwl.Progression
         public float[] ColorWeights;
         [Tooltip("Bonus gold granted each time a match of that color is destroyed, indexed by BallColor.")]
         public int[] ColorMatchGold;
+
+        [Header("Homing")]
+        [Tooltip("If true, in-flight projectiles auto-target a same-color ball that already has a same-color neighbor (guaranteed 3+ match).")]
+        public bool HomingStrictEnabled;
+        [Tooltip("If true, projectiles auto-target ANY same-color ball within range (no neighbor required). Subsumes strict mode.")]
+        public bool HomingLooseEnabled;
+        [Tooltip("Maximum world-space distance from the projectile at which a homing target can be acquired.")]
+        public float HomingRange;
 
         /// <summary>Number of entries in the BallColor enum.</summary>
         private static readonly int ColorCount = System.Enum.GetValues(typeof(BallColor)).Length;
@@ -127,6 +138,12 @@ namespace YuumisProwl.Progression
             ColorMatchGold = new int[ColorCount];
             for (int i = 0; i < ColorCount; i++)
                 ColorWeights[i] = 1f;
+
+            // Homing — flags disabled until an upgrade enables them; range starts at the
+            // serialized baseline so taking a homing flag alone is immediately useful.
+            HomingStrictEnabled = false;
+            HomingLooseEnabled = false;
+            HomingRange = homingRangeBaseline;
 
             if (defaults != null)
             {

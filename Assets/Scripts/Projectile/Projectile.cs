@@ -49,6 +49,11 @@ namespace YuumisProwl.Projectile
         private int pierceDestroyCount;
         private float bombRadius;
 
+        // Homing state (set per-launch by ProjectileSpawner).
+        private bool homingStrictEnabled;
+        private bool homingLooseEnabled;
+        private float homingRange;
+
         public BallColor ProjectileColor => projectileColor;
         public PowerUpType EquippedPowerUp => equippedPowerUp;
 
@@ -140,29 +145,153 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// Updates the target position based on player input.
+        /// Configures fire-and-forget homing for this projectile. Called by ProjectileSpawner
+        /// at spawn time from the player's RuntimeStats.
+        ///   strict — home on same-color balls that have a same-color neighbor (guaranteed match).
+        ///   loose  — home on ANY same-color ball (subsumes strict).
+        ///   range  — max world-space distance to acquire a target.
+        /// </summary>
+        public void SetHoming(bool strict, bool loose, float range)
+        {
+            homingStrictEnabled = strict;
+            homingLooseEnabled = loose;
+            homingRange = Mathf.Max(0f, range);
+        }
+
+        /// <summary>
+        /// Updates the target position. Default behavior tracks the cursor / touch.
+        /// When homing is enabled (and the player isn't holding right-mouse to override),
+        /// the target is overridden to a same-color ball in the chain within homingRange.
         /// </summary>
         private void UpdateTarget()
         {
             if (mainCamera == null) return;
 
+            // Read input — held right-click forces cursor mode even if homing is on.
+            Vector3 cursorTarget = targetPosition;
+            bool homingOverride = false;
+
             #if UNITY_EDITOR || UNITY_STANDALONE
-            // Always track mouse position in editor/standalone so the
-            // projectile continuously homes to the cursor and can circle it.
             Vector3 mousePos = Input.mousePosition;
             mousePos.z = Mathf.Abs(mainCamera.transform.position.z - transform.position.z);
-            targetPosition = mainCamera.ScreenToWorldPoint(mousePos);
-            
+            cursorTarget = mainCamera.ScreenToWorldPoint(mousePos);
+            homingOverride = Input.GetMouseButton(1); // hold right-click to disable homing
             #else
-            // Touch input for mobile
             if (Input.touchCount > 0)
             {
                 Touch touch = Input.GetTouch(0);
                 Vector3 touchPos = touch.position;
                 touchPos.z = Mathf.Abs(mainCamera.transform.position.z);
-                targetPosition = mainCamera.ScreenToWorldPoint(touchPos);
+                cursorTarget = mainCamera.ScreenToWorldPoint(touchPos);
             }
             #endif
+
+            Vector3? homingTarget = null;
+            bool homingActive = (homingStrictEnabled || homingLooseEnabled)
+                                && homingRange > 0f && !homingOverride
+                                && ballChainManager != null;
+            if (homingActive)
+                homingTarget = FindHomingTarget();
+
+            targetPosition = homingTarget ?? cursorTarget;
+        }
+
+        /// <summary>
+        /// Scans the chain for the closest same-color ball within homingRange that the
+        /// projectile can actually reach without colliding into something that'd cause
+        /// a miss. Different-color balls and obstacles between the projectile and the
+        /// target disqualify a candidate; same-color blockers are allowed (the projectile
+        /// would still match at that ball).
+        /// In strict mode (no loose), the candidate must have a same-color neighbor in
+        /// the same segment, so insertion guarantees a 3+ match. Power-up balls are ignored.
+        /// </summary>
+        private Vector3? FindHomingTarget()
+        {
+            var segments = ballChainManager.GetSegments();
+            if (segments == null || segments.Count == 0) return null;
+
+            bool strictOnly = !homingLooseEnabled;
+            float bestSq = homingRange * homingRange;
+            Vector3? best = null;
+            Vector3 selfPos = transform.position;
+
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var balls = segments[s].balls;
+                for (int i = 0; i < balls.Count; i++)
+                {
+                    var node = balls[i];
+                    if (node.ball == null) continue;
+                    if (node.ball.PowerUpType != BallPowerUpType.None) continue; // skip hammers etc.
+                    if (node.ball.BallColor != projectileColor) continue;
+
+                    if (strictOnly && !HasSameColorNeighbor(balls, i)) continue;
+
+                    Vector3 ballPos = node.ball.transform.position;
+                    float sq = (ballPos - selfPos).sqrMagnitude;
+                    if (sq > bestSq) continue;
+
+                    // Reject candidates whose path from the projectile is blocked by an
+                    // obstacle or a different-color ball — those would cause a missed shot.
+                    if (!IsPathClear(node.ball, ballPos)) continue;
+
+                    bestSq = sq;
+                    best = ballPos;
+                }
+            }
+
+            return best;
+        }
+
+        private bool HasSameColorNeighbor(List<BallNode> balls, int i)
+        {
+            if (i > 0)
+            {
+                var n = balls[i - 1].ball;
+                if (n != null && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
+                    return true;
+            }
+            if (i < balls.Count - 1)
+            {
+                var n = balls[i + 1].ball;
+                if (n != null && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// True if a sphere-cast from the projectile to the given target ball isn't
+        /// blocked by anything that would cause a missed shot — different-color balls,
+        /// hammer/power-up balls, or obstacles. Same-color blockers are tolerated
+        /// because the projectile would still match if it hit one.
+        /// </summary>
+        private bool IsPathClear(Ball targetBall, Vector3 targetPos)
+        {
+            Vector3 fromPos = transform.position;
+            Vector3 toDir = targetPos - fromPos;
+            float dist = toDir.magnitude;
+            if (dist < 0.05f) return true;
+
+            Vector3 dir = toDir / dist;
+            float radius = sphereCollider != null ? sphereCollider.radius : 0.3f;
+
+            if (Physics.SphereCast(fromPos, radius, dir, out RaycastHit hit, dist))
+            {
+                Ball blocker = hit.collider.GetComponent<Ball>();
+                if (blocker == targetBall) return true;
+
+                // Same-color, non-power-up ball blocker → fine, projectile would still match.
+                if (blocker != null
+                    && blocker.PowerUpType == BallPowerUpType.None
+                    && blocker.BallColor == projectileColor)
+                    return true;
+
+                // Anything else in the way (different color, hammer, obstacle) → blocked.
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -425,6 +554,11 @@ namespace YuumisProwl.Projectile
             distanceTraveled = 0f;
             pierceDestroyCount = 0;
             bombRadius = 0f;
+
+            // Clear homing state too.
+            homingStrictEnabled = false;
+            homingLooseEnabled = false;
+            homingRange = 0f;
 
             if (trailRenderer != null)
             {

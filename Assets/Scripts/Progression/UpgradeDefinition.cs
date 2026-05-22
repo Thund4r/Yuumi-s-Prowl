@@ -25,6 +25,9 @@ namespace YuumisProwl.Progression
         StartingGold,         // raw int — gold the run begins with
         ColorWeight,          // raw float — adds to TargetColor's spawn weight
         ColorMatchGold,       // raw int — gold per match of TargetColor
+        HomingStrict,         // flag — projectiles home onto same-color balls that have a same-color neighbor (guaranteed match)
+        HomingLoose,          // flag — projectiles home onto ANY same-color ball (subsumes strict)
+        HomingRange,          // raw float — adds to the homing detection radius
     }
 
     [CreateAssetMenu(fileName = "Upgrade_", menuName = "Yuumi/Upgrade Definition")]
@@ -70,6 +73,11 @@ namespace YuumisProwl.Progression
         [Tooltip("Essence cost per rank in the meta shop. Index 0 = cost of the 1st purchase, " +
                  "index 1 = 2nd, etc. Length should equal MaxRank. Ignored if IsMetaShop is false.")]
         [field: SerializeField] public int[] RankEssenceCosts { get; private set; } = new int[0];
+
+        [field: Header("Prerequisites")]
+        [Tooltip("Other upgrades that must already be acquired this run before this one can be offered. " +
+                 "Checked against RunState.appliedUpgrades — applies to drafts and the in-run shop.")]
+        [field: SerializeField] public UpgradeDefinition[] Prerequisites { get; private set; } = new UpgradeDefinition[0];
 
         /// <summary>True if this upgrade can be acquired more than once.</summary>
         public bool IsStackable => MaxRank > 1;
@@ -125,7 +133,32 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.ColorMatchGold:
                     stats.AddColorMatchGold(TargetColor, Mathf.RoundToInt(total));
                     break;
+                case UpgradeStat.HomingStrict:
+                    stats.HomingStrictEnabled = true;
+                    break;
+                case UpgradeStat.HomingLoose:
+                    stats.HomingLooseEnabled = true;
+                    break;
+                case UpgradeStat.HomingRange:
+                    stats.HomingRange += total;
+                    break;
             }
+        }
+
+        /// <summary>
+        /// Returns true if every prerequisite upgrade has already been acquired in this
+        /// run (i.e. is present in RunState.appliedUpgrades). Empty prerequisites = always met.
+        /// </summary>
+        public bool ArePrerequisitesMet(RunState state)
+        {
+            if (Prerequisites == null || Prerequisites.Length == 0) return true;
+            if (state == null) return false;
+            for (int i = 0; i < Prerequisites.Length; i++)
+            {
+                if (Prerequisites[i] != null && !state.HasUpgrade(Prerequisites[i]))
+                    return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -172,7 +205,11 @@ namespace YuumisProwl.Progression
                     return $"+{total:F1}";
                 case UpgradeStat.ColorWeight:
                     return $"+{total:F1} {TargetColor} spawn weight";
+                case UpgradeStat.HomingRange:
+                    return $"+{total:F1} homing range";
                 case UpgradeStat.ShopReroll:
+                case UpgradeStat.HomingStrict:
+                case UpgradeStat.HomingLoose:
                     return "Enabled";
                 default:
                     return "—";
