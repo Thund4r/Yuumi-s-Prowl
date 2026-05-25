@@ -123,7 +123,7 @@ namespace YuumisProwl.Projectile
             float speedMult = runtimeStats != null ? runtimeStats.PierceSpeedMultiplier
                             : powerUpSettings != null ? powerUpSettings.pierceSpeedMultiplier
                             : 2f;
-            float bombRad = runtimeStats != null ? runtimeStats.BombRadius
+            float bombRad = runtimeStats != null ? runtimeStats.ExplosionRadius
                           : powerUpSettings != null ? powerUpSettings.bombRadius
                           : 3f;
             float pierceWidth = runtimeStats != null ? runtimeStats.PierceWidthMultiplier : 1f;
@@ -214,7 +214,13 @@ namespace YuumisProwl.Projectile
         private void TryLaunchProjectile(Vector3 targetWorldPos)
         {
             if (currentProjectile == null) return;
-            if (Time.time - lastSpawnTime < spawnCooldown) return;
+
+            // Effective cooldown = base spawnCooldown minus FireRate bonuses from purple
+            // synergy upgrades. Clamped to a small minimum so we can't fire faster than once
+            // per ~50ms.
+            float fireBonus = runtimeStats != null ? runtimeStats.FireRateBonus : 0f;
+            float effectiveCooldown = Mathf.Max(0.05f, spawnCooldown - fireBonus);
+            if (Time.time - lastSpawnTime < effectiveCooldown) return;
 
             // Note: shooting during match processing / gap closing is allowed. The match
             // processor supports concurrent sequences, so a projectile-induced match in any

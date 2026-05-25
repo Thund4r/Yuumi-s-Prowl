@@ -12,7 +12,6 @@ namespace YuumisProwl
                 case BallColor.Red:    return new Color(1f, 0.2f, 0.2f);
                 case BallColor.Blue:   return new Color(0.2f, 0.5f, 1f);
                 case BallColor.Green:  return new Color(0.3f, 1f, 0.3f);
-                case BallColor.Yellow: return new Color(1f, 1f, 0.3f);
                 case BallColor.Purple: return new Color(0.8f, 0.3f, 1f);
                 case BallColor.Orange: return new Color(1f, 0.6f, 0.2f);
                 default:               return Color.white;
@@ -152,6 +151,16 @@ namespace YuumisProwl
         {
             if (weights == null || index < 0 || index >= weights.Length) return 1f;
             return Mathf.Max(0f, weights[index]);
+        }
+
+        /// <summary>
+        /// A muted version of a ball colour, suitable as the background tint of a
+        /// colour-synergy upgrade card (vivid enough to read at a glance, dark enough
+        /// to keep card text legible).
+        /// </summary>
+        public static Color GetSynergyBackgroundColor(BallColor color)
+        {
+            return Color.Lerp(ToUnityColor(color), new Color(0.16f, 0.16f, 0.18f), 0.55f);
         }
     }
 }

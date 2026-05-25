@@ -22,6 +22,8 @@ namespace YuumisProwl.Projectile
         [Header("Movement Settings")]
         [SerializeField] private float homingSpeed = 10f;
         [SerializeField] private float rotationSpeed = 5f;
+        [Tooltip("When a homing-locked projectile gets this close to its locked ball, it inserts directly — prevents orbiting/missing.")]
+        [SerializeField] private float homingArrivalDistance = 0.5f;
 
         [Header("Visual Settings")]
         [SerializeField] private MeshRenderer meshRenderer;
@@ -53,6 +55,9 @@ namespace YuumisProwl.Projectile
         private bool homingStrictEnabled;
         private bool homingLooseEnabled;
         private float homingRange;
+        // The ball this projectile has locked onto. Once set, the projectile commits to
+        // it — follows its live position and passes through everything else.
+        private Ball homingLock;
 
         public BallColor ProjectileColor => projectileColor;
         public PowerUpType EquippedPowerUp => equippedPowerUp;
@@ -105,6 +110,7 @@ namespace YuumisProwl.Projectile
             UpdateTarget();
             MoveTowardsTarget();
             RotateTowardsTarget();
+            TryHomingArrival();
         }
 
         /// <summary>
@@ -167,7 +173,7 @@ namespace YuumisProwl.Projectile
         {
             if (mainCamera == null) return;
 
-            // Read input — held right-click forces cursor mode even if homing is on.
+            // Read input — held right-click forces cursor mode and drops any homing lock.
             Vector3 cursorTarget = targetPosition;
             bool homingOverride = false;
 
@@ -186,33 +192,41 @@ namespace YuumisProwl.Projectile
             }
             #endif
 
-            Vector3? homingTarget = null;
-            bool homingActive = (homingStrictEnabled || homingLooseEnabled)
-                                && homingRange > 0f && !homingOverride
-                                && ballChainManager != null;
-            if (homingActive)
-                homingTarget = FindHomingTarget();
+            bool homingEnabled = (homingStrictEnabled || homingLooseEnabled)
+                                 && homingRange > 0f && ballChainManager != null;
 
-            targetPosition = homingTarget ?? cursorTarget;
+            if (homingOverride || !homingEnabled)
+            {
+                // Manual control — drop any lock so collision behaves normally.
+                homingLock = null;
+                targetPosition = cursorTarget;
+                return;
+            }
+
+            // Keep the current lock while it's valid; otherwise acquire a new one.
+            // Once locked, the projectile commits — it follows the ball's live position
+            // (tracking chain movement) and passes through everything else.
+            if (!IsLockValid())
+                homingLock = AcquireHomingTarget();
+
+            targetPosition = homingLock != null ? homingLock.transform.position : cursorTarget;
         }
 
         /// <summary>
-        /// Scans the chain for the closest same-color ball within homingRange that the
-        /// projectile can actually reach without colliding into something that'd cause
-        /// a miss. Different-color balls and obstacles between the projectile and the
-        /// target disqualify a candidate; same-color blockers are allowed (the projectile
-        /// would still match at that ball).
-        /// In strict mode (no loose), the candidate must have a same-color neighbor in
-        /// the same segment, so insertion guarantees a 3+ match. Power-up balls are ignored.
+        /// Picks the closest valid same-color ball within homingRange to lock onto.
+        /// In strict mode (no loose) the ball must have a same-color neighbor so insertion
+        /// guarantees a 3+ match. Power-up balls (hammers) are never targeted. No
+        /// line-of-sight test is needed — a locked projectile passes through everything
+        /// but its target, so any in-range candidate is reachable.
         /// </summary>
-        private Vector3? FindHomingTarget()
+        private Ball AcquireHomingTarget()
         {
             var segments = ballChainManager.GetSegments();
             if (segments == null || segments.Count == 0) return null;
 
             bool strictOnly = !homingLooseEnabled;
             float bestSq = homingRange * homingRange;
-            Vector3? best = null;
+            Ball best = null;
             Vector3 selfPos = transform.position;
 
             for (int s = 0; s < segments.Count; s++)
@@ -227,16 +241,12 @@ namespace YuumisProwl.Projectile
 
                     if (strictOnly && !HasSameColorNeighbor(balls, i)) continue;
 
-                    Vector3 ballPos = node.ball.transform.position;
-                    float sq = (ballPos - selfPos).sqrMagnitude;
-                    if (sq > bestSq) continue;
-
-                    // Reject candidates whose path from the projectile is blocked by an
-                    // obstacle or a different-color ball — those would cause a missed shot.
-                    if (!IsPathClear(node.ball, ballPos)) continue;
-
-                    bestSq = sq;
-                    best = ballPos;
+                    float sq = (node.ball.transform.position - selfPos).sqrMagnitude;
+                    if (sq <= bestSq)
+                    {
+                        bestSq = sq;
+                        best = node.ball;
+                    }
                 }
             }
 
@@ -261,37 +271,47 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// True if a sphere-cast from the projectile to the given target ball isn't
-        /// blocked by anything that would cause a missed shot — different-color balls,
-        /// hammer/power-up balls, or obstacles. Same-color blockers are tolerated
-        /// because the projectile would still match if it hit one.
+        /// True while the locked target is still worth homing onto — active, still the
+        /// projectile's color, and not a power-up ball. A destroyed ball is pooled and
+        /// deactivated, so activeSelf going false signals the lock should drop.
         /// </summary>
-        private bool IsPathClear(Ball targetBall, Vector3 targetPos)
+        private bool IsLockValid()
         {
-            Vector3 fromPos = transform.position;
-            Vector3 toDir = targetPos - fromPos;
-            float dist = toDir.magnitude;
-            if (dist < 0.05f) return true;
+            return homingLock != null
+                && homingLock.gameObject.activeSelf
+                && homingLock.PowerUpType == BallPowerUpType.None
+                && homingLock.BallColor == projectileColor;
+        }
 
-            Vector3 dir = toDir / dist;
-            float radius = sphereCollider != null ? sphereCollider.radius : 0.3f;
+        /// <summary>
+        /// Safety net: if a homing-locked projectile drifts within homingArrivalDistance
+        /// of its target, insert directly instead of waiting for the collider — prevents
+        /// a fast projectile orbiting a target it can't quite turn into.
+        /// </summary>
+        private void TryHomingArrival()
+        {
+            if (homingLock == null || !isActive) return;
 
-            if (Physics.SphereCast(fromPos, radius, dir, out RaycastHit hit, dist))
-            {
-                Ball blocker = hit.collider.GetComponent<Ball>();
-                if (blocker == targetBall) return true;
+            float sq = (homingLock.transform.position - transform.position).sqrMagnitude;
+            if (sq <= homingArrivalDistance * homingArrivalDistance)
+                InsertProjectileBall(homingLock);
+        }
 
-                // Same-color, non-power-up ball blocker → fine, projectile would still match.
-                if (blocker != null
-                    && blocker.PowerUpType == BallPowerUpType.None
-                    && blocker.BallColor == projectileColor)
-                    return true;
+        /// <summary>
+        /// Inserts this projectile's ball into the chain next to the given ball, then
+        /// returns the projectile to the pool. Shared by collision and homing-arrival.
+        /// </summary>
+        private void InsertProjectileBall(Ball ball)
+        {
+            if (!isActive || ball == null || ballChainManager == null) return;
 
-                // Anything else in the way (different color, hammer, obstacle) → blocked.
-                return false;
-            }
+            ballChainManager.InsertBallAtProgress(projectileColor, ball.PathProgress, transform.position);
+            homingLock = null;
 
-            return true;
+            if (ownerSpawner != null)
+                ownerSpawner.ReturnProjectile(this);
+            else
+                Deactivate();
         }
 
         /// <summary>
@@ -365,6 +385,12 @@ namespace YuumisProwl.Projectile
                 return;
             }
 
+            // Homing pass-through: while locked onto a target, ignore every collider that
+            // isn't the locked ball — balls drifting into the path and obstacles can't
+            // cause a misfire. Only the locked ball triggers insertion.
+            if (homingLock != null && other.GetComponent<Ball>() != homingLock)
+                return;
+
             if (other.CompareTag("Ball"))
             {
                 Ball hitBall = other.GetComponent<Ball>();
@@ -380,6 +406,7 @@ namespace YuumisProwl.Projectile
                         // Removing the hammer fires BallChainManager.OnHammerDestroyed,
                         // which MatchProcessor handles (recoil + cascade aftermath).
                         ballChainManager.RemoveBallAtIndex(hammerIndex);
+                        homingLock = null;
 
                         Debug.Log($"Hammer triggered by projectile at index {hammerIndex}.");
 
@@ -390,15 +417,7 @@ namespace YuumisProwl.Projectile
                     }
                     else
                     {
-                        float insertProgress = hitBall.PathProgress;
-                        ballChainManager.InsertBallAtProgress(projectileColor, insertProgress, transform.position);
-
-                        Debug.Log($"Projectile hit ball! Inserting {projectileColor} at progress {insertProgress:F2}");
-
-                        if (ownerSpawner != null)
-                            ownerSpawner.ReturnProjectile(this);
-                        else
-                            Deactivate();
+                        InsertProjectileBall(hitBall);
                     }
                 }
             }
@@ -559,6 +578,7 @@ namespace YuumisProwl.Projectile
             homingStrictEnabled = false;
             homingLooseEnabled = false;
             homingRange = 0f;
+            homingLock = null;
 
             if (trailRenderer != null)
             {

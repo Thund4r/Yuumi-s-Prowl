@@ -43,8 +43,30 @@ namespace YuumisProwl.Progression
         public float PierceSpeedMultiplier;
         public float PierceWidthMultiplier;
 
-        [Header("Bomb")]
-        public float BombRadius;
+        [Header("Explosion")]
+        [Tooltip("Radius of explosions — used by the Bomb power-up AND red-match explosions. " +
+                 "Count-scaled by RunManager from the number of red synergy upgrades owned; not an upgrade card.")]
+        public float ExplosionRadius;
+        [Tooltip("If true, red matches that meet the size threshold trigger an explosion.")]
+        public bool RedMatchExplosionEnabled;
+        [Tooltip("Lowers the red-match explosion size threshold (floored at 3). Additive from upgrades.")]
+        public int ExplosionThresholdReduction;
+        [Tooltip("Weight of Bomb vs Pierce when PowerUpChargeTracker awards a power-up. Pierce is always 1.0; higher values bias toward Bomb. Baseline 1.0 = 50/50.")]
+        public float BombAwardWeight;
+
+        [Header("Rage Synergy (Purple)")]
+        [Tooltip("If true, the rage meter is unlocked. Set by the RageUnlock 'anchor' purple upgrade.")]
+        public bool RageEnabled;
+        [Tooltip("Additive bonus to rage gained per ball destroyed (on top of RunConfig.rageGainPerBall).")]
+        public float RageBuildupBonus;
+        [Tooltip("Additive seconds added to the rage active duration (on top of RunConfig.rageDuration).")]
+        public float RageDurationBonus;
+        [Tooltip("Additive seconds removed from the projectile spawn cooldown — faster firing.")]
+        public float FireRateBonus;
+
+        [Header("Cached per-floor")]
+        [Tooltip("Count of colour-synergy upgrades owned, indexed by BallColor. Populated by RunManager.RecomputeSynergyStats() each floor load.")]
+        public int[] ColorSynergyCounts;
 
         [Header("Hammer")]
         public float HammerRecoilDistance;
@@ -104,6 +126,13 @@ namespace YuumisProwl.Progression
                 ColorWeights[i] = Mathf.Max(0f, ColorWeights[i] + amount);
         }
 
+        public void SetColorWeight(BallColor color, float value)
+        {
+            int i = (int)color;
+            if (ColorWeights != null && i >= 0 && i < ColorWeights.Length)
+                ColorWeights[i] = Mathf.Max(0f, value);
+        }
+
         public int GetColorMatchGold(BallColor color)
         {
             int i = (int)color;
@@ -115,6 +144,19 @@ namespace YuumisProwl.Progression
             int i = (int)color;
             if (ColorMatchGold != null && i >= 0 && i < ColorMatchGold.Length)
                 ColorMatchGold[i] += amount;
+        }
+
+        public int GetColorSynergyCount(BallColor color)
+        {
+            int i = (int)color;
+            return (ColorSynergyCounts != null && i >= 0 && i < ColorSynergyCounts.Length) ? ColorSynergyCounts[i] : 0;
+        }
+
+        public void SetColorSynergyCount(BallColor color, int count)
+        {
+            int i = (int)color;
+            if (ColorSynergyCounts != null && i >= 0 && i < ColorSynergyCounts.Length)
+                ColorSynergyCounts[i] = count;
         }
 
         /// <summary>
@@ -132,6 +174,14 @@ namespace YuumisProwl.Progression
             BallSpeedReduction = 0f;
             DraftRerollCount = 0;
             StartingGold = 0;
+            RedMatchExplosionEnabled = false;
+            ExplosionThresholdReduction = 0;
+            BombAwardWeight = 1f;
+            RageEnabled = false;
+            RageBuildupBonus = 0f;
+            RageDurationBonus = 0f;
+            FireRateBonus = 0f;
+            ColorSynergyCounts = new int[ColorCount];
 
             // Rebuild color-synergy arrays — weights baseline 1.0, match-gold baseline 0.
             ColorWeights = new float[ColorCount];
@@ -152,7 +202,7 @@ namespace YuumisProwl.Progression
                 ChargeThreshold = defaults.chargeThreshold;
                 PierceMaxDistance = defaults.pierceMaxDistance;
                 PierceSpeedMultiplier = defaults.pierceSpeedMultiplier;
-                BombRadius = defaults.bombRadius;
+                ExplosionRadius = defaults.bombRadius;
                 HammerRecoilDistance = defaults.hammerRecoilDistance;
             }
             else
@@ -164,7 +214,7 @@ namespace YuumisProwl.Progression
                 ChargeThreshold = 10;
                 PierceMaxDistance = 0f;
                 PierceSpeedMultiplier = 1f;
-                BombRadius = 0f;
+                ExplosionRadius = 0f;
                 HammerRecoilDistance = 0f;
                 Debug.LogWarning("RuntimeStats: Defaults (PowerUpSettings) not assigned — using fallback baselines. Assign PowerUpSettings in the inspector for correct values.");
             }

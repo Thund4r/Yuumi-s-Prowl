@@ -181,7 +181,7 @@ namespace YuumisProwl.BallChain
 
         public void SetColorCount(int count)
         {
-            colorCount = Mathf.Clamp(count, 1, 6);
+            colorCount = Mathf.Clamp(count, 1, 5);
         }
 
         public void SetTotalBalls(int total)

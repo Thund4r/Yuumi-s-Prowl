@@ -44,6 +44,22 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
+        /// How many colour-synergy upgrades of the given colour have been acquired this run.
+        /// Drives count-based synergy scaling (e.g. explosion radius growing per red upgrade).
+        /// </summary>
+        public int CountColorSynergyUpgrades(YuumisProwl.BallColor color)
+        {
+            int count = 0;
+            for (int i = 0; i < appliedUpgrades.Count; i++)
+            {
+                var u = appliedUpgrades[i];
+                if (u != null && u.IsColorSynergy && u.TargetColor == color)
+                    count++;
+            }
+            return count;
+        }
+
+        /// <summary>
         /// True if this upgrade can still be offered/acquired this run — i.e. the player
         /// hasn't already hit its MaxRank. Used to filter drafts and shop offerings.
         /// </summary>

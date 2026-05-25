@@ -15,7 +15,7 @@ namespace YuumisProwl.Progression
         YuumiRotationSpeed,   // multiplier field (starts 1.0)
         ChargePerBall,        // raw int
         PierceWidth,          // multiplier field (starts 1.0)
-        BombRadius,           // raw float
+        BombRadius,           // DEPRECATED — explosion radius is count-scaled, not a card. Don't author new cards with this.
         GoldGainBonus,        // multiplier field (starts 1.0)
         GoldPerCascade,       // raw int
         ShopReroll,           // flag — enables the in-run shop reroll button
@@ -23,11 +23,18 @@ namespace YuumisProwl.Progression
         BallSpeedReduction,   // raw float — subtracted from the ball-speed multiplier
         DraftReroll,          // raw int — free draft rerolls per level
         StartingGold,         // raw int — gold the run begins with
-        ColorWeight,          // raw float — adds to TargetColor's spawn weight
+        ColorWeight,          // DEPRECATED — colour spawn weight is count-scaled from synergy upgrades, not a card.
         ColorMatchGold,       // raw int — gold per match of TargetColor
-        HomingStrict,         // flag — projectiles home onto same-color balls that have a same-color neighbor (guaranteed match)
-        HomingLoose,          // flag — projectiles home onto ANY same-color ball (subsumes strict)
+        HomingStrict,         // DEPRECATED — homing is now rage-gated; the rage meter sets HomingStrictEnabled dynamically.
+        HomingLoose,          // DEPRECATED — see above; loose tier is set by the rage meter at high purple count.
         HomingRange,          // raw float — adds to the homing detection radius
+        RedMatchExplosion,    // flag — red matches at/above the size threshold trigger an explosion
+        ExplosionThresholdReduction, // raw int — lowers the red-match explosion size threshold
+        BombSpawnWeight,      // raw float — biases the Bomb vs Pierce roll when a power-up is awarded
+        RageBuildupRate,      // raw float — extra rage gained per ball destroyed
+        RageDuration,         // raw float — extra seconds added to rage active duration
+        FireRate,             // raw float — seconds shaved off the projectile spawn cooldown
+        RageUnlock,           // flag — anchor purple upgrade that enables the rage meter
     }
 
     [CreateAssetMenu(fileName = "Upgrade_", menuName = "Yuumi/Upgrade Definition")]
@@ -49,8 +56,13 @@ namespace YuumisProwl.Progression
                  "Total at max rank = ModifierValue × MaxRank.")]
         [field: SerializeField] public float ModifierValue { get; private set; }
 
-        [Tooltip("Which ball color this upgrade targets. Only used by color stats (ColorWeight, ColorMatchGold).")]
+        [Tooltip("Which ball color this upgrade targets / belongs to. Used by color stats " +
+                 "(ColorWeight, ColorMatchGold) and by color-synergy grouping.")]
         [field: SerializeField] public BallColor TargetColor { get; private set; }
+
+        [Tooltip("If true, this is a colour-synergy upgrade — it belongs to TargetColor's synergy, " +
+                 "gets a coloured card background, and counts toward that colour's synergy total.")]
+        [field: SerializeField] public bool IsColorSynergy { get; private set; }
 
         [field: Header("Availability")]
         [Tooltip("Can appear in the end-of-level upgrade draft.")]
@@ -103,9 +115,8 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.PierceWidth:
                     stats.PierceWidthMultiplier += total;
                     break;
-                case UpgradeStat.BombRadius:
-                    stats.BombRadius += total;
-                    break;
+                // BombRadius is deprecated — explosion radius is count-scaled from red
+                // synergy upgrades (RunManager.RecomputeSynergyStats), not an upgrade card.
                 case UpgradeStat.GoldGainBonus:
                     stats.GoldGainMultiplier += total;
                     break;
@@ -127,20 +138,36 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.StartingGold:
                     stats.StartingGold += Mathf.RoundToInt(total);
                     break;
-                case UpgradeStat.ColorWeight:
-                    stats.AddColorWeight(TargetColor, total);
-                    break;
+                // ColorWeight is deprecated — colour spawn weight is count-scaled from
+                // synergy upgrades (RunManager.RecomputeSynergyStats), not an upgrade card.
                 case UpgradeStat.ColorMatchGold:
                     stats.AddColorMatchGold(TargetColor, Mathf.RoundToInt(total));
                     break;
-                case UpgradeStat.HomingStrict:
-                    stats.HomingStrictEnabled = true;
-                    break;
-                case UpgradeStat.HomingLoose:
-                    stats.HomingLooseEnabled = true;
-                    break;
+                // HomingStrict / HomingLoose are deprecated — rage meter (purple synergy)
+                // sets these flags dynamically while rage is active. Don't author cards.
                 case UpgradeStat.HomingRange:
                     stats.HomingRange += total;
+                    break;
+                case UpgradeStat.RedMatchExplosion:
+                    stats.RedMatchExplosionEnabled = true;
+                    break;
+                case UpgradeStat.ExplosionThresholdReduction:
+                    stats.ExplosionThresholdReduction += Mathf.RoundToInt(total);
+                    break;
+                case UpgradeStat.BombSpawnWeight:
+                    stats.BombAwardWeight += total;
+                    break;
+                case UpgradeStat.RageBuildupRate:
+                    stats.RageBuildupBonus += total;
+                    break;
+                case UpgradeStat.RageDuration:
+                    stats.RageDurationBonus += total;
+                    break;
+                case UpgradeStat.FireRate:
+                    stats.FireRateBonus += total;
+                    break;
+                case UpgradeStat.RageUnlock:
+                    stats.RageEnabled = true;
                     break;
             }
         }
@@ -199,17 +226,26 @@ namespace YuumisProwl.Progression
                     return $"+{Mathf.RoundToInt(total)}";
                 case UpgradeStat.ColorMatchGold:
                     return $"+{Mathf.RoundToInt(total)} gold / {TargetColor} match";
+                case UpgradeStat.ExplosionThresholdReduction:
+                    return $"-{Mathf.RoundToInt(total)} explosion threshold";
                 // Raw float stats.
                 case UpgradeStat.YuumiRotationSpeed:
-                case UpgradeStat.BombRadius:
                     return $"+{total:F1}";
-                case UpgradeStat.ColorWeight:
-                    return $"+{total:F1} {TargetColor} spawn weight";
+                case UpgradeStat.BombSpawnWeight:
+                    return $"+{total:F1} bomb weight";
+                case UpgradeStat.RageBuildupRate:
+                    return $"+{total:F1} rage per ball";
+                case UpgradeStat.RageDuration:
+                    return $"+{total:F1}s rage duration";
+                case UpgradeStat.FireRate:
+                    return $"-{total:F2}s fire cooldown";
                 case UpgradeStat.HomingRange:
                     return $"+{total:F1} homing range";
                 case UpgradeStat.ShopReroll:
                 case UpgradeStat.HomingStrict:
                 case UpgradeStat.HomingLoose:
+                case UpgradeStat.RedMatchExplosion:
+                case UpgradeStat.RageUnlock:
                     return "Enabled";
                 default:
                     return "—";

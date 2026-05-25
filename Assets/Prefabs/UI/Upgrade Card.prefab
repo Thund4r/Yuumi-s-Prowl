@@ -469,6 +469,7 @@ MonoBehaviour:
   costText: {fileID: 5773636300641654258}
   buyButton: {fileID: 7222872507166145422}
   buyButtonCanvasGroup: {fileID: 7026966763453124192}
+  backgroundImage: {fileID: 7958845504184002303}
 --- !u!114 &7356778054026436839
 MonoBehaviour:
   m_ObjectHideFlags: 0

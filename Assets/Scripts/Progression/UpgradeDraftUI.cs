@@ -18,6 +18,8 @@ namespace YuumisProwl.Progression
         [SerializeField] private Image[] optionIcons = new Image[3];
         [SerializeField] private TextMeshProUGUI[] optionNames = new TextMeshProUGUI[3];
         [SerializeField] private TextMeshProUGUI[] optionDescriptions = new TextMeshProUGUI[3];
+        [Tooltip("Optional — background Image of each option card, tinted for colour-synergy upgrades.")]
+        [SerializeField] private Image[] optionBackgrounds = new Image[3];
 
         [Header("Reroll")]
         [SerializeField] private Button rerollButton;
@@ -30,6 +32,8 @@ namespace YuumisProwl.Progression
         private Func<UpgradeDefinition[]> onRerollRequested;
         private int rerollsRemaining = 0;
         private bool isWaitingForSelection = false;
+        // Authored background colours, captured so non-synergy cards can be restored.
+        private Color[] defaultOptionBgColors;
 
         private void Awake()
         {
@@ -47,6 +51,12 @@ namespace YuumisProwl.Progression
                 int index = i;
                 optionButtons[i].onClick.AddListener(() => SelectUpgrade(index));
             }
+
+            // Capture each card's authored background colour for non-synergy upgrades.
+            defaultOptionBgColors = new Color[optionBackgrounds.Length];
+            for (int i = 0; i < optionBackgrounds.Length; i++)
+                if (optionBackgrounds[i] != null)
+                    defaultOptionBgColors[i] = optionBackgrounds[i].color;
 
             if (rerollButton != null)
                 rerollButton.onClick.AddListener(OnRerollClicked);
@@ -95,6 +105,15 @@ namespace YuumisProwl.Progression
 
                 if (optionDescriptions[i] != null)
                     optionDescriptions[i].text = upgrade.Description;
+
+                // Tint the card background for colour-synergy upgrades; restore the
+                // authored colour for generic upgrades.
+                if (i < optionBackgrounds.Length && optionBackgrounds[i] != null)
+                {
+                    optionBackgrounds[i].color = upgrade.IsColorSynergy
+                        ? BallColorUtils.GetSynergyBackgroundColor(upgrade.TargetColor)
+                        : defaultOptionBgColors[i];
+                }
 
                 optionButtons[i].interactable = true;
             }

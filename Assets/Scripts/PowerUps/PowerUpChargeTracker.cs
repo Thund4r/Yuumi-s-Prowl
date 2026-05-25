@@ -94,14 +94,20 @@ namespace YuumisProwl.PowerUps
 
         /// <summary>
         /// Picks a random earnable power-up type and adds it to the inventory.
-        /// Extend the type list as new power-ups are added.
+        /// Pierce is always weight 1.0; Bomb's weight is RuntimeStats.BombAwardWeight
+        /// (baseline 1.0 = 50/50). Red synergy upgrades can bias the roll toward Bomb.
         /// </summary>
         private void AwardPowerUp()
         {
             if (inventory == null) return;
 
-            PowerUpType[] pool = { PowerUpType.Pierce, PowerUpType.Bomb };
-            PowerUpType awarded = pool[Random.Range(0, pool.Length)];
+            float bombWeight = runtimeStats != null ? Mathf.Max(0f, runtimeStats.BombAwardWeight) : 1f;
+            const float pierceWeight = 1f;
+            float total = bombWeight + pierceWeight;
+
+            PowerUpType awarded = total > 0f && Random.value * total < bombWeight
+                ? PowerUpType.Bomb
+                : PowerUpType.Pierce;
 
             bool added = inventory.AddPowerUp(awarded);
             if (!added)

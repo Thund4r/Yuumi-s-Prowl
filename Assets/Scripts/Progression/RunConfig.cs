@@ -41,6 +41,33 @@ namespace YuumisProwl.Progression
         [Tooltip("Bonus gold awarded per cascade in a match sequence (after the first match).")]
         [Min(0)] public int goldPerCascadeBonus = 5;
 
+        [Header("Explosion Synergy (Red)")]
+        [Tooltip("Baseline explosion radius (Bomb power-up + red-match explosions) before any red synergy upgrades.")]
+        [Min(0f)] public float baseExplosionRadius = 3f;
+
+        [Tooltip("Extra explosion radius per red colour-synergy upgrade the player owns. Count-scaling balance knob.")]
+        [Min(0f)] public float explosionRadiusPerRedUpgrade = 0.5f;
+
+        [Tooltip("Minimum red match size that triggers an explosion (when the RedMatchExplosion upgrade is owned). Threshold-reduction upgrades lower this, floored at 3.")]
+        [Min(3)] public int redMatchExplosionThreshold = 4;
+
+        [Header("Colour Weighting")]
+        [Tooltip("Extra spawn weight a colour gets per colour-synergy upgrade of that colour owned. Baseline weight is 1.0. So with 1.0 here, X red upgrades = +X red weight.")]
+        [Min(0f)] public float colorWeightPerSynergyUpgrade = 1f;
+
+        [Header("Rage Synergy (Purple)")]
+        [Tooltip("Purple synergy upgrades needed for rage to grant loose homing + multi-fire (instead of strict). Count includes the RageUnlock anchor itself.")]
+        [Min(1)] public int rageLoosePurpleCount = 3;
+
+        [Tooltip("Maximum value of the rage meter — once reached, rage activates.")]
+        [Min(1f)] public float rageMeterMax = 100f;
+
+        [Tooltip("Rage gained per ball destroyed (matches fill the meter).")]
+        [Min(0f)] public float rageGainPerBall = 5f;
+
+        [Tooltip("Base seconds rage stays active once triggered (before bonuses).")]
+        [Min(0.1f)] public float rageDuration = 5f;
+
         /// <summary>
         /// Safe sampler — returns 1.0 when the curve has no keyframes so an unconfigured
         /// asset doesn't silently zero out gameplay values.

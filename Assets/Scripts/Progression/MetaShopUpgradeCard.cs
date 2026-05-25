@@ -19,6 +19,8 @@ namespace YuumisProwl.Progression
         [SerializeField] private TextMeshProUGUI costText;
         [SerializeField] private Button buyButton;
         [SerializeField] private CanvasGroup buyButtonCanvasGroup;
+        [Tooltip("Optional — card background Image, tinted for colour-synergy upgrades.")]
+        [SerializeField] private Image backgroundImage;
 
         private UpgradeDefinition upgrade;
         private MetaShopUI parentShop;
@@ -31,6 +33,10 @@ namespace YuumisProwl.Progression
             if (nameText != null) nameText.text = upgrade.UpgradeName;
             if (descriptionText != null) descriptionText.text = upgrade.Description;
             if (iconImage != null && upgrade.Icon != null) iconImage.sprite = upgrade.Icon;
+
+            // Tint the background for colour-synergy upgrades (most meta upgrades aren't).
+            if (backgroundImage != null && upgrade.IsColorSynergy)
+                backgroundImage.color = BallColorUtils.GetSynergyBackgroundColor(upgrade.TargetColor);
 
             if (buyButton != null)
                 buyButton.onClick.AddListener(OnBuyButtonClicked);

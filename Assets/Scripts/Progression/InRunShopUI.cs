@@ -132,7 +132,7 @@ namespace YuumisProwl.Progression
             }
 
             if (rerollCostText != null)
-                rerollCostText.text = $"Reroll: {rerollCost}";
+                rerollCostText.text = $"Reroll: {rerollCost} gold";
         }
 
         private void OnRerollClicked()

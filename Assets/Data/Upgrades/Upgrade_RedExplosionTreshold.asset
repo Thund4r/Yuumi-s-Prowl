@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
+  m_Name: Upgrade_RedExplosionTreshold
+  m_EditorClassIdentifier: 
+  <UpgradeId>k__BackingField: RedExplosionThreshold
+  <Stat>k__BackingField: 17
+  <UpgradeName>k__BackingField: Volatile Balls
+  <Description>k__BackingField: Reduces the matches needed for explosions by 1.
+  <Icon>k__BackingField: {fileID: 0}
+  <ModifierValue>k__BackingField: 1
+  <TargetColor>k__BackingField: 0
+  <IsColorSynergy>k__BackingField: 1
+  <IsDraftable>k__BackingField: 1
+  <IsShoppable>k__BackingField: 1
+  <IsMetaShop>k__BackingField: 0
+  <MaxRank>k__BackingField: 1
+  <ShopCost>k__BackingField: 100
+  <RankEssenceCosts>k__BackingField: 
+  <Prerequisites>k__BackingField:
+  - {fileID: 11400000, guid: 57ca611d25d7b534aace073f47c2afae, type: 2}

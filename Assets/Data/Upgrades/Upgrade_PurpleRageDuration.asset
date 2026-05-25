@@ -10,21 +10,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
-  m_Name: Upgrade_HomingLoose
+  m_Name: Upgrade_PurpleRageDuration
   m_EditorClassIdentifier: 
-  <UpgradeId>k__BackingField: HomingLoose
-  <Stat>k__BackingField: 14
-  <UpgradeName>k__BackingField: Homing projectiles
-  <Description>k__BackingField: The projectiles will now home into any same coloured
-    balls.
+  <UpgradeId>k__BackingField: 
+  <Stat>k__BackingField: 0
+  <UpgradeName>k__BackingField: 
+  <Description>k__BackingField: 
   <Icon>k__BackingField: {fileID: 0}
   <ModifierValue>k__BackingField: 0
   <TargetColor>k__BackingField: 0
+  <IsColorSynergy>k__BackingField: 0
   <IsDraftable>k__BackingField: 1
-  <IsShoppable>k__BackingField: 1
+  <IsShoppable>k__BackingField: 0
   <IsMetaShop>k__BackingField: 0
   <MaxRank>k__BackingField: 1
   <ShopCost>k__BackingField: 100
   <RankEssenceCosts>k__BackingField: 
-  <Prerequisites>k__BackingField:
-  - {fileID: 11400000, guid: 9b01f2ada76223a4695567da548c9bf9, type: 2}
+  <Prerequisites>k__BackingField: []

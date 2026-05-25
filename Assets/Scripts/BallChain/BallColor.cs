@@ -8,7 +8,6 @@ namespace YuumisProwl
         Red,
         Blue,
         Green,
-        Yellow,
         Purple,
         Orange
     }

@@ -393,7 +393,15 @@ namespace YuumisProwl.BallChain
             // points to the ball that was behind the hammer. A batch removal (Bomb / match)
             // can shift indices a lot — clamp into the surviving chain's range.
             int ballCount = ballChainManager.BallCount;
-            if (ballCount <= 0) yield break;
+            if (ballCount <= 0)
+            {
+                // The hammer was the last ball — the chain is now empty. Hammer removal
+                // isn't a colour match, so nothing else fires OnChainCleared; do it here
+                // so GameManager's win check triggers.
+                OnMatchSequenceComplete?.Invoke(0, -1);
+                OnChainCleared?.Invoke();
+                yield break;
+            }
             int idx = Mathf.Clamp(hammerOriginalChainIndex, 0, ballCount - 1);
 
             ChainSegment backSeg = ballChainManager.GetSegmentForChainIndex(idx);
@@ -502,8 +510,9 @@ namespace YuumisProwl.BallChain
             // Brief pause so the visual destruction lands before cascade matches start firing.
             yield return new WaitForSeconds(destructionDelay);
 
-            // Scan segments for matches and process them one at a time. Each ProcessMatches
-            // call may re-split or merge the chain, so we re-scan after every iteration.
+            // --- Phase 1: handle IMMEDIATE matches (3-in-a-row formed directly by the
+            // removals). ProcessMatches handles each one fully, including its own
+            // gap-close + cascade-on-merge for that match.
             while (true)
             {
                 var segs = ballChainManager.GetSegments();
@@ -522,9 +531,67 @@ namespace YuumisProwl.BallChain
                     }
                 }
 
-                if (segWithMatch == null) yield break;
-
+                if (segWithMatch == null) break;
                 yield return StartCoroutine(ProcessMatches(segWithMatch, firstMatch));
+            }
+
+            // --- Phase 2: the removals may have left a chain split with NO immediate match.
+            // The lead-driven backward motion will close the gap naturally. Register a
+            // sequence on the front segment so OnSegmentsMergedHandler runs cascade detection
+            // as merges happen — mirrors HammerAftermathRoutine.
+            yield return StartCoroutine(WatchGapCloseCascade());
+        }
+
+        /// <summary>
+        /// Registers a sequence on the current front segment and waits for the chain to
+        /// reunify, so that OnSegmentsMergedHandler runs cascade detection at every merge
+        /// boundary as the gap closes. Fires OnMatchSequenceComplete and applies a final
+        /// recoil if any cascade matches occurred.
+        ///
+        /// Called by the bomb/pierce/explosion aftermath after immediate matches are processed.
+        /// The hammer aftermath inlines its own version (which also includes the initial
+        /// back-segment recoil) and so doesn't call this.
+        /// </summary>
+        private IEnumerator WatchGapCloseCascade()
+        {
+            var segments = ballChainManager.GetSegments();
+            if (segments == null || segments.Count <= 1) yield break;
+
+            ChainSegment frontSeg = segments[0];
+            if (frontSeg == null || frontSeg.IsEmpty) yield break;
+            int currentSegId = frontSeg.id;
+
+            // Don't clobber a sequence already tracking this segment (e.g. a Phase-1
+            // match's sequence may still be in flight on this segment's id).
+            if (sequencesById.ContainsKey(currentSegId)) yield break;
+
+            var sequenceState = new MatchSequenceState
+            {
+                frontSegId = currentSegId,
+                matchCount = 0,
+                lastGapGlobalIndex = -1,
+            };
+            sequencesById[currentSegId] = sequenceState;
+
+            // Wait for the front segment to absorb everything behind it. While we wait,
+            // OnSegmentsMergedHandler fires for each merge and runs cascade detection.
+            yield return StartCoroutine(WaitForBackMost(currentSegId));
+
+            // If cascade matches happened, apply the final "snap back" recoil and fire
+            // the sequence-complete event.
+            if (sequencesById.ContainsKey(currentSegId))
+            {
+                if (sequenceState.matchCount > 0)
+                {
+                    ChainSegment merged = FindSegmentById(currentSegId);
+                    if (merged != null && !merged.IsEmpty)
+                    {
+                        float finalRecoil = CalculateRecoilDistance(sequenceState.matchCount);
+                        yield return StartCoroutine(ApplyChainRecoil(finalRecoil, merged));
+                    }
+                    OnMatchSequenceComplete?.Invoke(sequenceState.matchCount, sequenceState.lastGapGlobalIndex);
+                }
+                sequencesById.Remove(currentSegId);
             }
         }
 

@@ -97,7 +97,7 @@ namespace YuumisProwl.Progression
             {
                 Debug.Log($"RunManager: RUN-START STATS — Gold={state.gold}, ChargePerBall={runtimeStats.ChargePerBallDestroyed}, " +
                           $"ShopRerollEnabled={runtimeStats.ShopRerollEnabled}, GoldGainMult={runtimeStats.GoldGainMultiplier:F2}, " +
-                          $"PierceWidth={runtimeStats.PierceWidthMultiplier:F2}, BombRadius={runtimeStats.BombRadius:F2}");
+                          $"PierceWidth={runtimeStats.PierceWidthMultiplier:F2}, ExplosionRadius={runtimeStats.ExplosionRadius:F2}");
             }
             LoadCurrentNode();
         }
@@ -204,6 +204,10 @@ namespace YuumisProwl.Progression
                         AdvanceToNextNode();
                         return;
                     }
+                    // Refresh count-scaled synergy stats — upgrades only change between
+                    // floors, so recomputing as each gameplay floor loads is sufficient.
+                    RecomputeSynergyStats();
+
                     float t = GetFloorProgress();
                     float ballSpeedMult = config.SampleBallSpeedMult(t);
                     float totalBallsMult = config.SampleTotalBallsMult(t);
@@ -220,6 +224,30 @@ namespace YuumisProwl.Progression
                     OpenShop();
                     break;
             }
+        }
+
+        /// <summary>
+        /// Recomputes per-run stats that scale with the count of colour-synergy upgrades
+        /// owned. Called as each gameplay floor loads — upgrades only change between floors.
+        /// </summary>
+        private void RecomputeSynergyStats()
+        {
+            if (runtimeStats == null || config == null || state == null) return;
+
+            // Cache the per-colour synergy counts once for everything that needs them
+            // (explosion radius, weights, rage meter, future synergies).
+            foreach (BallColor c in System.Enum.GetValues(typeof(BallColor)))
+            {
+                int count = state.CountColorSynergyUpgrades(c);
+                runtimeStats.SetColorSynergyCount(c, count);
+                // Colour spawn weight scales with synergy upgrades of that colour owned.
+                runtimeStats.SetColorWeight(c, 1f + count * config.colorWeightPerSynergyUpgrade);
+            }
+
+            // Explosion radius — count-scaled by red synergy upgrades.
+            int redCount = runtimeStats.GetColorSynergyCount(BallColor.Red);
+            runtimeStats.ExplosionRadius = config.baseExplosionRadius
+                                           + redCount * config.explosionRadiusPerRedUpgrade;
         }
 
         private void OpenShop()

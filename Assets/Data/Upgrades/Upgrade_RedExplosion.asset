@@ -10,18 +10,18 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
-  m_Name: Upgrade_HomingStrict
+  m_Name: Upgrade_RedExplosion
   m_EditorClassIdentifier: 
-  <UpgradeId>k__BackingField: HomingStrict
-  <Stat>k__BackingField: 13
-  <UpgradeName>k__BackingField: Homing projectiles
-  <Description>k__BackingField: The projectiles will now home towards groups with
-    the same colour of 2 or more.
+  <UpgradeId>k__BackingField: RedMatchExplosion
+  <Stat>k__BackingField: 16
+  <UpgradeName>k__BackingField: Red Explosions
+  <Description>k__BackingField: Red balls with matches of 4+ will cause an explosion
   <Icon>k__BackingField: {fileID: 0}
   <ModifierValue>k__BackingField: 0
   <TargetColor>k__BackingField: 0
+  <IsColorSynergy>k__BackingField: 1
   <IsDraftable>k__BackingField: 1
-  <IsShoppable>k__BackingField: 1
+  <IsShoppable>k__BackingField: 0
   <IsMetaShop>k__BackingField: 0
   <MaxRank>k__BackingField: 1
   <ShopCost>k__BackingField: 100

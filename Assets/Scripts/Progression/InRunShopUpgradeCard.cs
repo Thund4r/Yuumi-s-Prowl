@@ -29,13 +29,23 @@ namespace YuumisProwl.Progression
         [Tooltip("Content root toggled on/off when this slot is unused. Defaults to this GameObject.")]
         [SerializeField] private GameObject content;
 
+        [Tooltip("Optional — card background Image, tinted for colour-synergy upgrades.")]
+        [SerializeField] private Image backgroundImage;
+
         private UpgradeDefinition upgrade;
         private InRunShopUI parentShop;
         private bool purchased;
+        private Color defaultBgColor;
+        private bool capturedBgColor;
 
         private void Awake()
         {
             if (content == null) content = gameObject;
+            if (backgroundImage != null)
+            {
+                defaultBgColor = backgroundImage.color;
+                capturedBgColor = true;
+            }
             if (cardButton != null)
                 cardButton.onClick.AddListener(OnCardClicked);
         }
@@ -56,6 +66,14 @@ namespace YuumisProwl.Progression
             if (iconImage != null && upgrade.Icon != null) iconImage.sprite = upgrade.Icon;
             if (costText != null) costText.text = $"{upgrade.ShopCost}";
             if (soldOverlay != null) soldOverlay.SetActive(false);
+
+            // Tint the background for colour-synergy upgrades; restore default otherwise.
+            if (backgroundImage != null && capturedBgColor)
+            {
+                backgroundImage.color = upgrade.IsColorSynergy
+                    ? BallColorUtils.GetSynergyBackgroundColor(upgrade.TargetColor)
+                    : defaultBgColor;
+            }
 
             RefreshAffordability();
         }

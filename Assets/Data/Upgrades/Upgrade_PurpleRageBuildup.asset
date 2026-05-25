@@ -10,17 +10,20 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
-  m_Name: Upgrade_BombRadius
+  m_Name: Upgrade_PurpleRageBuildup
   m_EditorClassIdentifier: 
-  <UpgradeId>k__BackingField: BombRadius
-  <Stat>k__BackingField: 3
-  <UpgradeName>k__BackingField: Bomb radius
-  <Description>k__BackingField: Bomb powerup gains +1 to radius
+  <UpgradeId>k__BackingField: 
+  <Stat>k__BackingField: 0
+  <UpgradeName>k__BackingField: 
+  <Description>k__BackingField: 
   <Icon>k__BackingField: {fileID: 0}
-  <ModifierValue>k__BackingField: 1
+  <ModifierValue>k__BackingField: 0
+  <TargetColor>k__BackingField: 0
+  <IsColorSynergy>k__BackingField: 0
   <IsDraftable>k__BackingField: 1
-  <IsShoppable>k__BackingField: 1
+  <IsShoppable>k__BackingField: 0
   <IsMetaShop>k__BackingField: 0
   <MaxRank>k__BackingField: 1
   <ShopCost>k__BackingField: 100
   <RankEssenceCosts>k__BackingField: 
+  <Prerequisites>k__BackingField: []
