@@ -63,6 +63,13 @@ namespace YuumisProwl.BallChain
         /// MatchProcessor listens to this to run the hammer recoil + cascade aftermath.
         /// </summary>
         public System.Action<int, float> OnHammerDestroyed;
+        /// <summary>
+        /// Fired whenever a *frozen* ball is removed from the chain — by any means
+        /// (match, projectile, Pierce, Bomb, red explosion, or another icicle). Param is
+        /// the ball's world position at removal time. IceSynergy listens and spawns an
+        /// icicle from this position, enabling chain reactions through frozen balls.
+        /// </summary>
+        public System.Action<Vector3> OnFrozenBallDestroyed;
 
         private List<ChainSegment> segments = new List<ChainSegment>();
         private ObjectPool<Ball> ballPool;
@@ -503,6 +510,18 @@ namespace YuumisProwl.BallChain
                 }
             }
 
+            // Capture frozen-ball positions before pooling so IceSynergy can spawn
+            // icicles from where each frozen ball was. Chain reactions ride this hook.
+            List<Vector3> frozenPositions = null;
+            foreach (var node in nodesToRemove)
+            {
+                if (node.isFrozen && node.ball != null)
+                {
+                    if (frozenPositions == null) frozenPositions = new List<Vector3>(nodesToRemove.Count);
+                    frozenPositions.Add(node.ball.transform.position);
+                }
+            }
+
             // Group removals by segment
             var bySegment = new Dictionary<int, List<BallNode>>();
             foreach (var node in nodesToRemove)
@@ -537,6 +556,12 @@ namespace YuumisProwl.BallChain
 
             if (hammerRemoved)
                 OnHammerDestroyed?.Invoke(hammerIndex, hammerRecoil);
+
+            if (frozenPositions != null)
+            {
+                for (int i = 0; i < frozenPositions.Count; i++)
+                    OnFrozenBallDestroyed?.Invoke(frozenPositions[i]);
+            }
         }
 
         /// <summary>
@@ -554,6 +579,10 @@ namespace YuumisProwl.BallChain
             bool hammerRemoved = node.ball != null && node.ball.PowerUpType == BallPowerUpType.Hammer;
             float hammerRecoil = hammerRemoved ? node.ball.PowerUpValue : 0f;
 
+            // Capture frozen position before pool return so IceSynergy can spawn an icicle.
+            bool wasFrozen = node.isFrozen && node.ball != null;
+            Vector3 frozenPos = wasFrozen ? node.ball.transform.position : Vector3.zero;
+
             if (node.ball != null)
             {
                 ballPool.Return(node.ball);
@@ -567,6 +596,9 @@ namespace YuumisProwl.BallChain
 
             if (hammerRemoved)
                 OnHammerDestroyed?.Invoke(globalChainIndex, hammerRecoil);
+
+            if (wasFrozen)
+                OnFrozenBallDestroyed?.Invoke(frozenPos);
         }
 
         /// <summary>

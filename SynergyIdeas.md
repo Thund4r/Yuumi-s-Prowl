@@ -20,58 +20,86 @@ Design constraints:
 | Blue   | Ice / time control                   | Favored — see below          |
 | Green  | Cascade / chain reactions            | Favored — see below          |
 | Orange | Powered chain-consumer (deathray-ish)| Favored — see below          |
-| Yellow | (open)                               | No favored direction yet     |
+| Yellow | (open)                               | Removed from roster — could return as an unlock |
 
 ---
 
 ## Blue — Ice synergy
 
 ### Core direction
-Where Red *destroys*, Blue *delays* — the chain becomes a malleable timeline,
-not a relentless conveyor. The player is buying time and reshaping pressure.
+Where Red *destroys*, Blue *delays* and *self-clears*. A blue match plants a
+slow-acting time-bomb in the chain: balls passing through the icy aftermath
+accumulate frost, eventually freeze, and when destroyed launch homing icicles
+that can chain-react into other frozen balls.
 
-### Favored mechanics (mix and match)
+### V1 — Ice Patches loop (the core build)
 
-- **Ice patches on the path.** A blue match leaves a frozen segment of the spline path
-  at the match site. Balls passing through it pick up frost stacks (visual: balls
-  visibly frosting/cracking). At N stacks (say 3) the ball shatters. Multiple matches
-  near each other build *kill zones* along the chain.
-  *Implementation hook:* a path-progress range marker; per-`Ball` stack counter that
-  ticks up when its progress crosses an ice patch; remove at threshold.
+Anchor upgrade **`IcePatches`** unlocks the whole loop:
 
-- **Cryo burst.** Blue match emits a freezing ring at the match site; every ball inside
-  the ring freezes in place for a window. The frozen balls don't move while the rest
-  of the chain still does — creates a gap as the chain advances past them. Frozen
-  balls remain matchable.
-  *Visual:* expanding ice ring; frozen balls tint icy and stop.
-  *Implementation hook:* per-`BallNode` "frozen until time T" flag respected by
-  `BallChainManager.MoveChain`.
+1. **Blue match → ice patch.** Spawns a world-space disc at the match centroid
+   (radius and duration in RunConfig; defaults ~2.5 world units, ~5 seconds).
+   The patch is purely an effect — it does not block movement.
+2. **Pass-through stacks frost.** A ball entering the patch (first contact)
+   gets +1 freeze stack. While the ball stays inside, no further stacks accrue
+   from that patch. After it leaves AND a re-entry cooldown elapses
+   (~2 seconds, RunConfig), re-entering can apply another stack. So slow-moving
+   balls / curved paths can still rack stacks over time, but no per-frame spam.
+3. **3 stacks → freeze.** Threshold lives in RunConfig (default 3). When a
+   ball hits the threshold, it becomes frozen and its stack counter zeroes
+   (no double-freeze accumulation). **Frozen balls still move** — they're just
+   visibly icy and tagged for the icicle hook.
+4. **Frozen ball destroyed (by anything) → icicle.** Match, bomb, pierce, red
+   explosion, another icicle — every removal path checks
+   `BallNode.isFrozen` and fires `OnFrozenBallDestroyed(worldPos)` from
+   `BallChainManager`. The Ice synergy listens and spawns one icicle at the
+   destroyed ball's position.
+5. **Icicle = single-target homing projectile.** Locks onto a random ball not
+   currently being targeted by another icicle, homes to it, destroys on contact.
+   `IceSynergy` keeps a `HashSet<Ball>` of currently-targeted balls so multiple
+   icicles spread out instead of dogpiling.
+6. **Chain reaction.** Icicles can target frozen balls; destroying a frozen
+   ball spawns another icicle. One blue match can cascade into a self-clearing
+   chunk of the chain.
 
-- **Icicle launchers (from frozen balls).** *Icicles aren't spawned by matches — they're
-  spawned by frozen balls themselves.* While a ball is frozen, it periodically launches
-  1–2 homing icicles. Each icicle tracks a random ball in the chain (any colour) and
-  destroys it on contact. Reuses Step 8 homing + pass-through.
-  - **Chain reaction:** when a frozen ball is *destroyed* (by anything — match, icicle,
-    bomb), it bursts out a final volley of icicles before vanishing. So one icicle that
-    hits a frozen ball triggers more icicles → those can hit other frozen balls → more
-    bursts → runaway cascade.
-  - **Scaling:** more frozen balls = more icicle launchers in flight. The "fundamental
-    change" is that the chain becomes self-clearing once enough freeze stacks up.
-  - *Visual:* icicles materialise off the frozen ball's surface and dart toward targets;
-    death-burst is a radial spray.
-  - *Implementation hook:* per-`Ball` frozen-state timer that ticks icicle launches; a
-    death-burst hook fires extra icicles when a frozen ball leaves the chain; reuses the
-    `Projectile` homing core as a lightweight icicle projectile.
+*Implementation hooks:* `IcePatch` is a plain data class (center, radius,
+expiryTime, `Dictionary<BallNode, BallState>` for per-ball entry/exit
+tracking). `IceSynergy` is a scene MonoBehaviour mirroring `ExplosionSynergy`'s
+pattern — subscribes to `OnMatchVisual` (spawn patches) and to
+`OnFrozenBallDestroyed` on `BallChainManager` (spawn icicles). `Icicle` is a
+lightweight pooled MonoBehaviour with a locked `Ball` target.
 
-### Tweaks noted
-- Don't freeze the *entire* chain — too dominant. Freeze a segment, or a path-range,
-  not everything.
-- Frozen balls should still be matchable — opens cool interactions with red explosions.
-- Question: should freeze duration scale with match size, blue synergy count, or both?
+### Documented-but-unbuilt follow-up upgrades
 
-### Count-scaled idea
-Each blue synergy upgrade extends freeze duration *or* adds +1 to the shatter-stack
-count from ice patches *or* adds 1 icicle to the volley.
+These are designed-and-locked but **not in V1** — separate scoped builds.
+
+- **Cryo Burst** *(anchor, prereq: `IcePatches`)* — blue matches gain an
+  AoE freezing ring on top of the normal destruction. Each ball in the AoE
+  takes +1 freeze stack (one-shot, not pass-through). Further upgrade:
+  destroyed frozen balls *also* emit a cryo burst, compounding the chain
+  reaction.
+
+- **Chain Slowdown** *(count-scaled, every blue synergy upgrade)* — for X
+  seconds after any blue match, the chain moves slower (e.g. baseline 1.0×
+  → 0.8× per blue upgrade owned). Slows speed, *not* duration.
+
+- **Longer Slow** *(stacking card)* — extends the slowdown window after a
+  blue match (e.g. 1.0s → 1.2s per rank). Pairs with Chain Slowdown.
+
+- **Freeze the Hunted** *(stacking card, prereq: `IcePatches`)* — icicles
+  prioritise targeting already-frozen balls when one is available, falling
+  back to random untargeted otherwise. Makes the chain-reaction fantasy more
+  reliable.
+
+- **Frost-stack threshold reduction** *(stacking card)* — lowers the
+  stacks-to-freeze count from 3 (RunConfig default), floored at 1. Mirrors
+  RedExplosionThreshold.
+
+### Discarded / superseded notes
+- The original "Cryo burst freezes balls in place" reading (chain advances
+  past stationary balls) was the wrong mental model — the V1 design above
+  is what's authoritative. Frozen balls still move.
+- "Don't freeze the entire chain" still applies — V1 doesn't pause anything;
+  the slowdown is a separate follow-up upgrade with bounded magnitude.
 
 ---
 
@@ -180,6 +208,43 @@ changes the game" bar. Open prompts to revisit later:
 - **Ball conversion / anti-destruction** — yellow matches don't destroy; instead they
   pluck balls *off* the chain (saved for later) or convert them to "blessed" balls
   with bonus effects.
+
+---
+
+## Meta-progression ideas
+
+### Colour unlock progression
+Instead of starting with the full colour roster, the player begins runs with
+only 3 colours active. Beating the game unlocks the 4th colour and all its
+associated synergy upgrades; beating it again unlocks the 5th. Unlocks could
+alternatively (or additionally) be gated behind essence cost in the meta shop
+— buy the new colour with essence as a backup path for players who can't yet
+clear the final floor.
+
+**Why this works:**
+- Adds a long-term progression arc on top of per-run unlocks — players watch
+  the game *grow* as they win.
+- Reduces early-game decision paralysis: fewer colours = fewer synergy paths
+  to weigh per draft.
+- Gives each newly-unlocked colour a spotlight moment — the first run after
+  unlocking feels like a fresh experience of the game.
+- Lets us tune synergy difficulty per colour: lock the "weirder" / higher-skill
+  synergies (Blue ice timing, Orange consumer routing) behind later unlocks,
+  while the starter three are the most readable (e.g. Red blast, Green
+  cascade, Purple rage).
+
+**Open questions:**
+- Unlock trigger: first clear of the final floor? Essence cost in the meta
+  shop? Both (essence as a backup if a player struggles to win)?
+- Are the 3 starting colours fixed (e.g. Red/Green/Purple) or does the player
+  pick at run start?
+- Upgrade pool size — early runs have fewer synergy upgrades available, so
+  draft pools shrink. Is that fine, or do we need extra non-synergy stat
+  cards to fill the gap?
+- Does the `LevelData.colorCount` cap get gated by unlocks, or does the level
+  stay authored at the full count and the spawner filters to unlocked
+  colours? (Probably the latter — keeps authoring and progression cleanly
+  separated.)
 
 ---
 

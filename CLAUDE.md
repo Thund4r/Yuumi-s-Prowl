@@ -164,11 +164,18 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
 ### Meta Progression
 - Meta upgrades are **ordinary `UpgradeDefinition` assets** with `IsMetaShop` enabled — there is no separate meta-upgrade type. They need a unique stable `UpgradeId` (the save key) and a `RankEssenceCosts[]` array (distinct cost per rank).
 - `MetaProgressionSettings` (ScriptableObject) — tunes only the **essence reward**: `baseEssencePerFloor`, `essenceDepthCurve`, `essenceDifficultyScaling`. Create via **Yuumi → Meta Progression Settings**.
-- `PlayerProfile` — serializable persistent data: `essenceTotal`, `essenceSpent`, `metaUpgrades[]` (`MetaUpgradeState` = `upgradeId` + 0-based `rank`, -1 = unpurchased).
-- `PlayerProfileManager` (MonoBehaviour, DontDestroyOnLoad) — save/load (JSON in `persistentDataPath`, with corrupt-file backup + sanitization). `GrantEssence(int)`, `GetMetaRank(id)`, `PurchaseUpgrade(UpgradeDefinition)` (charges `GetEssenceCost(nextRank)`, caps at `MaxRank`).
+- `PlayerProfile` — serializable persistent data: `essenceTotal`, `essenceSpent`, `metaUpgrades[]` (`MetaUpgradeState` = `upgradeId` + 0-based `rank`, -1 = unpurchased), `unlockedColorCount` (how many `BallColor` enum entries are active for this profile).
+- `PlayerProfileManager` (MonoBehaviour, DontDestroyOnLoad) — save/load (JSON in `persistentDataPath`, with corrupt-file backup + sanitization). `GrantEssence(int)`, `GetMetaRank(id)`, `PurchaseUpgrade(UpgradeDefinition)` (charges `GetEssenceCost(nextRank)`, caps at `MaxRank`). Colour-unlock helpers: `GetUnlockedColorCount()`, `IsColorUnlocked(BallColor)`, `UnlockNextColor()` (no-op once maxed).
 - Meta upgrade application: `RunManager.StartNewRun()` → `ApplyMetaUpgradesToRunStats()` matches each saved `metaUpgrades` entry to an `UpgradeDefinition` in the `UpgradeDatabase` by `UpgradeId` and calls `Apply(runtimeStats, rank + 1)`. Everything funnels through `RuntimeStats` — `BallSpeedReduction`, `EssenceGainMultiplier`, and `DraftRerollCount` are RuntimeStats fields read by `RunManager` during the run.
 - `UpgradeDatabase` (ScriptableObject) — the **single master list** of every `UpgradeDefinition`. Both `RunManager` and `MetaShopUI` reference one shared database asset (they live in different scenes). `RunManager` filters it by `IsDraftable`/`IsShoppable` and looks up meta upgrades by `UpgradeId`; `MetaShopUI` calls `GetMetaShopUpgrades()` for everything flagged `IsMetaShop`. Register an upgrade here once instead of wiring it into multiple scene objects. Create via **Yuumi → Upgrade Database**.
 - `MetaShopUI` — main-menu shop. Reads meta upgrades from the shared `UpgradeDatabase` (`GetMetaShopUpgrades()`), instantiates a `MetaShopUpgradeCard` per upgrade; fades in/out on show/hide. `MetaShopUpgradeCard` shows icon, name, description, rank progress bar, `GetEffectSummary` bonus, next-rank cost; buy button (disabled if maxed or unaffordable) calls `PlayerProfileManager.PurchaseUpgrade`.
+
+### Colour Unlock Progression
+- A fresh profile starts with the **first 3 entries of the `BallColor` enum unlocked** (`PlayerProfileManager.StartingUnlockedColors`); the cap is 5 (`MaxUnlockableColors`, must match enum length). Enum order is the unlock order — current order is Red → Blue → Green → Purple → Orange, so starters are Red/Blue/Green and Purple, then Orange unlock later.
+- A full-run clear (any `EndRun(won: true)` from `RunManager`) calls `PlayerProfileManager.UnlockNextColor()`, which increments and saves; it's a no-op once at the cap. Editor shortcut: Shift+U.
+- The cap is plumbed via `LevelManager.LoadMap(prefab, ballSpeedMult, totalBallsMult, colorCountCap)` — `RunManager` passes `GetUnlockedColorCount()`, and `LoadMap` clamps `LevelData.colorCount` to `min(authored, cap)` before calling `BallSpawner.SetColorCount`. `ProjectileSpawner` already reads colour count from the canonical `BallSpawner.ColorCount`, so projectile colours follow automatically.
+- Colour-locked upgrades are hidden in drafts/shops: `RunManager.IsAvailable` filters out any `UpgradeDefinition` flagged `IsColorSynergy` whose `TargetColor` is locked. Non-synergy upgrades (e.g. `PierceWidth`, `GoldGainBonus`) are unaffected. So unlocking a new colour also unlocks its full pool of synergy cards.
+- Save migration: old saves without `unlockedColorCount` deserialize as 0; `SanitizeProfile` clamps up to `StartingUnlockedColors`, so existing players begin at 3 colours after the update.
 
 ### Color Synergy
 - Per-run, per-color tunables live in `RuntimeStats`: `ColorWeights[]` (spawn-weight per `BallColor`, baseline 1.0) and `ColorMatchGold[]` (bonus gold per match of that color, baseline 0). Rebuilt by `ResetToDefaults()` each run; access via `GetColorWeight`/`SetColorWeight`/`GetColorMatchGold`/`AddColorMatchGold` helpers.
@@ -179,8 +186,9 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
 - **Red explosion synergy:** `ExplosionSynergy` (scene component) subscribes to `MatchProcessor.OnMatchVisual`; when a red match of size ≥ the effective threshold occurs and `RuntimeStats.RedMatchExplosionEnabled` is set, it explodes at the match centroid (deferred one frame to avoid match-processing re-entrancy) — `Physics.OverlapSphere` of `ExplosionRadius`, removes balls, hands off to `MatchProcessor.ProcessPierceAftermath`. Threshold = `RunConfig.redMatchExplosionThreshold − RuntimeStats.ExplosionThresholdReduction`, floored at 3. Driven by the `RedMatchExplosion` (flag) and `ExplosionThresholdReduction` upgrades.
 - **Bomb spawn bias:** `PowerUpChargeTracker.AwardPowerUp` weights Bomb against Pierce by `RuntimeStats.BombAwardWeight` (baseline 1.0 = 50/50). The `BombSpawnWeight` upgrade biases the roll — red synergy can lean the player's awarded power-ups toward bombs.
 - **Purple rage synergy:** `RageMeter` (scene component) is gated by `RuntimeStats.RageEnabled` — set by the **`RageUnlock`** anchor upgrade (mirrors how `RedMatchExplosion` enables red explosions). Without the anchor, no rage. With it, the meter subscribes to `MatchProcessor.OnBallsDestroyed` and **only purple matches build the meter** — `HandleBallsDestroyed` filters by `color != BallColor.Purple`, so purple synergy is self-reinforcing (more purple upgrades → more purple balls spawned via `ColorWeights` → faster rage charging). Each destroyed purple ball adds `RunConfig.rageGainPerBall + RuntimeStats.RageBuildupBonus` rage. At max, rage activates for `RunConfig.rageDuration + RuntimeStats.RageDurationBonus` seconds, sets `RuntimeStats.HomingStrictEnabled` (and `HomingLooseEnabled` if total purple synergy count ≥ `RunConfig.rageLoosePurpleCount` — granting multi-fire too), then expires and resets to 0. While filling, more matches won't pause progress; while active, the meter is locked. `RageMeterUI` drives a fill-Image bar from the meter's events; the foreground Image must be `Image Type = Filled`. If the optional `visibleRoot` is used, do **not** point it at `RageMeterUI`'s own GameObject — the script guards against that (would self-disable and never re-enable on unlock), but it's still a misconfig. Purple stat upgrades: `RageBuildupRate` (faster fill), `RageDuration` (longer active window), `FireRate` (shorter projectile cooldown — always-on), plus the existing `HomingRange`. The `HomingStrict` / `HomingLoose` upgrade stats are **deprecated** — rage now sets those flags dynamically.
+- **Blue ice-patches synergy:** `IceSynergy` (scene component) gated by `RuntimeStats.IcePatchesEnabled` — set by the **`IcePatches`** anchor upgrade. With it active: blue matches spawn a world-space ice patch (`RunConfig.icePatchRadius`, `icePatchDuration`) at the match centroid. Per-frame, every ball inside the disc gets a frost stack on first contact; re-entry can re-stack only after `icePatchReentryCooldown` since exit (default 2s — prevents per-frame stack spam). At `iceFreezeStackThreshold` stacks (default 3), the ball becomes frozen and its stacks zero out. **Frozen balls still move with the chain** — they're just visually icy and tagged. When a frozen ball is removed by *anything* (match, bomb, pierce, red explosion, another icicle), `BallChainManager` fires `OnFrozenBallDestroyed(worldPos)`. `IceSynergy` listens, picks a random ball not currently targeted by another icicle, and spawns an `Icicle` from the destruction site that homes to the target at `RunConfig.icicleSpeed` and destroys it on contact (`icicleArrivalDistance`). Icicles use `MatchProcessor.ProcessPierceAftermath` so cascade detection runs the same as bomb/pierce. Chain reactions: icicle destroys frozen ball → spawns another icicle. `IceSynergy` keeps a `HashSet<Ball> targetedBalls` so spread is enforced. Per-patch state lives in `IcePatch.perBallState` (`Dictionary<BallNode, IcePatchBallState>`); both pool sizes (patch visuals, icicles) are serialized. Frost-stack and frozen visuals live on `Ball.SetFrostStacks(int)` / `Ball.SetFrozen(bool)` — a colour-lerp toward pale ice-blue, deeper when frozen. **Not yet built** (followups, see SynergyIdeas.md): cryo-burst AoE on match (gated behind anchor), chain-slowdown per blue upgrade, longer-slow duration card, frozen-priority icicle targeting upgrade, frost-stack threshold reduction card.
 - Deprecated `UpgradeStat`s — `BombRadius`, `ColorWeight` — explosion radius and colour weight are count-scaled now; don't author cards with these.
-- Not yet built: blue icicles, "dead balls" — Step 8's tracking exists so they're unblocked, not yet built.
+- Not yet built: "dead balls" — Step 8's tracking exists so they're unblocked, not yet built.
 
 ---
 
@@ -352,6 +360,35 @@ All three contexts use one `UpgradeDefinition` asset type.
 - Settings/Options menu.
 - MainMenu Play button (currently auto-loads `Game.unity` in `Start`).
 - A unified `GameSettings` ScriptableObject for cross-level constants (destruction delay, insertion duration, ball spacing).
+
+---
+
+## Debug & Cheat Commands
+
+Living reference of every keyboard shortcut bound for dev/testing. Two visibility tiers — **editor-only** shortcuts are wrapped in `#if UNITY_EDITOR` and won't ship; **editor + standalone** shortcuts are wrapped in `#if UNITY_EDITOR || UNITY_STANDALONE` and WILL be present in PC builds (mobile builds drop them since there's no keyboard). If something here should be hidden from a future release build, wrap it in `UNITY_EDITOR` only.
+
+### Editor-only (debug)
+Defined in [`PlayerProfileManager.cs`](Assets/Scripts/Progression/PlayerProfileManager.cs):
+- **Shift+E** — grant 100 essence
+- **Shift+M** — set essence to 1000
+- **Shift+R** — reset all meta upgrades to unpurchased
+- **Shift+U** — unlock the next ball colour (caps at `MaxUnlockableColors`)
+- **Shift+L** — reset colour unlocks back to the starting count (`StartingUnlockedColors`, default 3)
+- **Shift+D** — wipe the save file and replace it with a fresh-state profile (essence 0, no meta upgrades, starter colours unlocked). Useful for resetting between test runs when something goes wrong.
+
+### Editor + standalone (cheat shortcuts — ship to PC builds)
+Defined in [`PowerUpInventory.cs`](Assets/Scripts/PowerUps/PowerUpInventory.cs):
+- **1 / 2 / 3 / 4** — equip the power-up in slot 0 / 1 / 2 / 3 (pressing the same key again unequips)
+- **0** — unequip the currently-equipped power-up
+- **P** — grant a Bomb power-up directly to the inventory
+
+Defined in [`ProjectileSpawner.cs`](Assets/Scripts/Projectile/ProjectileSpawner.cs):
+- **Mouse0** (left-click / tap) — fire the loaded projectile toward the cursor / touch
+- **shootKey** (serialized on the spawner, defaults to `Mouse0`) — when set to a non-mouse key, that key also fires
+
+### Always-available (gameplay, not debug)
+Defined in [`Projectile.cs`](Assets/Scripts/Projectile/Projectile.cs):
+- **Hold right-mouse (Mouse1)** — manual steer; disables homing lock while held, projectile follows the cursor directly
 
 ---
 

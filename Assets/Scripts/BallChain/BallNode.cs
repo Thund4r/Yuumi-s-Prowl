@@ -20,6 +20,18 @@ namespace YuumisProwl.BallChain
         /// (often off the path) and slides toward its target path point as this decays to zero.
         /// </summary>
         public Vector3 worldOffset;
+        /// <summary>
+        /// Blue Ice-Patches synergy: how many freeze stacks this ball has accrued from
+        /// passing through ice patches. At RunConfig.iceFreezeStackThreshold the ball
+        /// becomes frozen and stacks zero out.
+        /// </summary>
+        public int freezeStacks;
+        /// <summary>
+        /// True if the ball is currently frozen. Frozen balls still move with the chain,
+        /// but on destruction (by any means) BallChainManager fires OnFrozenBallDestroyed
+        /// so IceSynergy can spawn an icicle.
+        /// </summary>
+        public bool isFrozen;
 
         public BallNode(Ball ball, float pathProgress, int chainIndex)
         {
@@ -29,6 +41,8 @@ namespace YuumisProwl.BallChain
             this.segmentId = -1;
             this.smoothShift = 0f;
             this.worldOffset = Vector3.zero;
+            this.freezeStacks = 0;
+            this.isFrozen = false;
         }
     }
 }

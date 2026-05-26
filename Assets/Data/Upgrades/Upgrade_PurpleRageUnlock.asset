@@ -12,16 +12,18 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
   m_Name: Upgrade_PurpleRageUnlock
   m_EditorClassIdentifier: 
-  <UpgradeId>k__BackingField: 
-  <Stat>k__BackingField: 0
-  <UpgradeName>k__BackingField: 
-  <Description>k__BackingField: 
+  <UpgradeId>k__BackingField: PurpleRageUnlock
+  <Stat>k__BackingField: 22
+  <UpgradeName>k__BackingField: Awakening
+  <Description>k__BackingField: Build up rage by matching purple balls to fire homing
+    projectiles. Take purple upgrades to increase homing effectiveness and unlock
+    rapid fire
   <Icon>k__BackingField: {fileID: 0}
   <ModifierValue>k__BackingField: 0
-  <TargetColor>k__BackingField: 0
-  <IsColorSynergy>k__BackingField: 0
+  <TargetColor>k__BackingField: 3
+  <IsColorSynergy>k__BackingField: 1
   <IsDraftable>k__BackingField: 1
-  <IsShoppable>k__BackingField: 0
+  <IsShoppable>k__BackingField: 1
   <IsMetaShop>k__BackingField: 0
   <MaxRank>k__BackingField: 1
   <ShopCost>k__BackingField: 100

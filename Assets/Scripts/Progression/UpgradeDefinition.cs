@@ -10,31 +10,43 @@ namespace YuumisProwl.Progression
     /// be acquired up to MaxRank times; every rank adds ModifierValue to the stat
     /// (all stats scale linearly — see UpgradeDefinition.Apply).
     /// </summary>
+    // Explicit int values are pinned so adding/removing entries mid-list does NOT shift
+    // any other stat's serialized integer. Asset files store the stat as an int
+    // (`<Stat>k__BackingField: N`), so unstable indices would silently re-bind every
+    // authored upgrade to the wrong stat.
+    //
+    // Reuse policy:
+    //   - Pre-public-testing (now): retired-slot values may be reused for new stats.
+    //     The game is still in dev, no shipped saves to protect.
+    //   - Once the game ships to playtesters / publicly: retired values become permanent
+    //     deprecation markers. NEW stats must go at the end (24+) to avoid silently
+    //     re-binding any player's saved / shared asset to a different stat.
     public enum UpgradeStat
     {
-        YuumiRotationSpeed,   // multiplier field (starts 1.0)
-        ChargePerBall,        // raw int
-        PierceWidth,          // multiplier field (starts 1.0)
-        BombRadius,           // DEPRECATED — explosion radius is count-scaled, not a card. Don't author new cards with this.
-        GoldGainBonus,        // multiplier field (starts 1.0)
-        GoldPerCascade,       // raw int
-        ShopReroll,           // flag — enables the in-run shop reroll button
-        EssenceGain,          // multiplier field (starts 1.0)
-        BallSpeedReduction,   // raw float — subtracted from the ball-speed multiplier
-        DraftReroll,          // raw int — free draft rerolls per level
-        StartingGold,         // raw int — gold the run begins with
-        ColorWeight,          // DEPRECATED — colour spawn weight is count-scaled from synergy upgrades, not a card.
-        ColorMatchGold,       // raw int — gold per match of TargetColor
-        HomingStrict,         // DEPRECATED — homing is now rage-gated; the rage meter sets HomingStrictEnabled dynamically.
-        HomingLoose,          // DEPRECATED — see above; loose tier is set by the rage meter at high purple count.
-        HomingRange,          // raw float — adds to the homing detection radius
-        RedMatchExplosion,    // flag — red matches at/above the size threshold trigger an explosion
-        ExplosionThresholdReduction, // raw int — lowers the red-match explosion size threshold
-        BombSpawnWeight,      // raw float — biases the Bomb vs Pierce roll when a power-up is awarded
-        RageBuildupRate,      // raw float — extra rage gained per ball destroyed
-        RageDuration,         // raw float — extra seconds added to rage active duration
-        FireRate,             // raw float — seconds shaved off the projectile spawn cooldown
-        RageUnlock,           // flag — anchor purple upgrade that enables the rage meter
+        YuumiRotationSpeed           = 0,  // multiplier field (starts 1.0)
+        ChargePerBall                = 1,  // raw int
+        PierceWidth                  = 2,  // multiplier field (starts 1.0)
+        // 3 = removed (was BombRadius — explosion radius is count-scaled now)
+        GoldGainBonus                = 4,  // multiplier field (starts 1.0)
+        GoldPerCascade               = 5,  // raw int
+        ShopReroll                   = 6,  // flag — enables the in-run shop reroll button
+        EssenceGain                  = 7,  // multiplier field (starts 1.0)
+        BallSpeedReduction           = 8,  // raw float — subtracted from the ball-speed multiplier
+        DraftReroll                  = 9,  // raw int — free draft rerolls per level
+        StartingGold                 = 10, // raw int — gold the run begins with
+        // 11 = removed (was ColorWeight — colour weight is count-scaled now)
+        ColorMatchGold               = 12, // raw int — gold per match of TargetColor
+        // 13 = removed (was HomingStrict — homing is rage-gated now)
+        // 14 = removed (was HomingLoose — homing is rage-gated now)
+        HomingRange                  = 15, // raw float — adds to the homing detection radius
+        RedMatchExplosion            = 16, // flag — red matches at/above the size threshold trigger an explosion
+        ExplosionThresholdReduction  = 17, // raw int — lowers the red-match explosion size threshold
+        BombSpawnWeight              = 18, // raw float — biases the Bomb vs Pierce roll when a power-up is awarded
+        RageBuildupRate              = 19, // raw float — extra rage gained per ball destroyed
+        RageDuration                 = 20, // raw float — extra seconds added to rage active duration
+        FireRate                     = 21, // raw float — seconds shaved off the projectile spawn cooldown
+        RageUnlock                   = 22, // flag — anchor purple upgrade that enables the rage meter
+        IcePatches                   = 23, // flag — anchor blue upgrade. Blue matches drop ice patches that frost-stack passing balls; at threshold a ball freezes; destroying a frozen ball spawns an icicle.
     }
 
     [CreateAssetMenu(fileName = "Upgrade_", menuName = "Yuumi/Upgrade Definition")]
@@ -115,8 +127,6 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.PierceWidth:
                     stats.PierceWidthMultiplier += total;
                     break;
-                // BombRadius is deprecated — explosion radius is count-scaled from red
-                // synergy upgrades (RunManager.RecomputeSynergyStats), not an upgrade card.
                 case UpgradeStat.GoldGainBonus:
                     stats.GoldGainMultiplier += total;
                     break;
@@ -138,13 +148,9 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.StartingGold:
                     stats.StartingGold += Mathf.RoundToInt(total);
                     break;
-                // ColorWeight is deprecated — colour spawn weight is count-scaled from
-                // synergy upgrades (RunManager.RecomputeSynergyStats), not an upgrade card.
                 case UpgradeStat.ColorMatchGold:
                     stats.AddColorMatchGold(TargetColor, Mathf.RoundToInt(total));
                     break;
-                // HomingStrict / HomingLoose are deprecated — rage meter (purple synergy)
-                // sets these flags dynamically while rage is active. Don't author cards.
                 case UpgradeStat.HomingRange:
                     stats.HomingRange += total;
                     break;
@@ -168,6 +174,9 @@ namespace YuumisProwl.Progression
                     break;
                 case UpgradeStat.RageUnlock:
                     stats.RageEnabled = true;
+                    break;
+                case UpgradeStat.IcePatches:
+                    stats.IcePatchesEnabled = true;
                     break;
             }
         }
@@ -242,10 +251,9 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.HomingRange:
                     return $"+{total:F1} homing range";
                 case UpgradeStat.ShopReroll:
-                case UpgradeStat.HomingStrict:
-                case UpgradeStat.HomingLoose:
                 case UpgradeStat.RedMatchExplosion:
                 case UpgradeStat.RageUnlock:
+                case UpgradeStat.IcePatches:
                     return "Enabled";
                 default:
                     return "—";

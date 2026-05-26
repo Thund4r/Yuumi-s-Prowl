@@ -55,6 +55,25 @@ namespace YuumisProwl.Progression
         [Tooltip("Extra spawn weight a colour gets per colour-synergy upgrade of that colour owned. Baseline weight is 1.0. So with 1.0 here, X red upgrades = +X red weight.")]
         [Min(0f)] public float colorWeightPerSynergyUpgrade = 1f;
 
+        [Header("Ice Patches Synergy (Blue)")]
+        [Tooltip("World-space radius of an ice patch dropped by a blue match.")]
+        [Min(0.1f)] public float icePatchRadius = 2.5f;
+
+        [Tooltip("How long an ice patch persists after a blue match drops it (seconds).")]
+        [Min(0.1f)] public float icePatchDuration = 5f;
+
+        [Tooltip("Freeze stacks a ball must accrue before becoming frozen. Stacks zero out on freeze.")]
+        [Min(1)] public int iceFreezeStackThreshold = 3;
+
+        [Tooltip("After a ball exits an ice patch, how long before that same patch can re-apply a stack to it. Prevents per-frame stack-spam on slow-moving / re-entering balls.")]
+        [Min(0f)] public float icePatchReentryCooldown = 2f;
+
+        [Tooltip("Travel speed of an icicle projectile spawned when a frozen ball is destroyed (world units / second).")]
+        [Min(0.1f)] public float icicleSpeed = 8f;
+
+        [Tooltip("Distance at which an icicle is considered to have arrived at its target ball (world units).")]
+        [Min(0.05f)] public float icicleArrivalDistance = 0.4f;
+
         [Header("Rage Synergy (Purple)")]
         [Tooltip("Purple synergy upgrades needed for rage to grant loose homing + multi-fire (instead of strict). Count includes the RageUnlock anchor itself.")]
         [Min(1)] public int rageLoosePurpleCount = 3;

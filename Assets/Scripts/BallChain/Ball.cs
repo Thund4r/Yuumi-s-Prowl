@@ -28,6 +28,8 @@ namespace YuumisProwl.BallChain
         private Material ballMaterial;
         private BallPowerUpType powerUpType = BallPowerUpType.None;
         private float powerUpValue = 0f;
+        private int frostStacks = 0;
+        private bool frozen = false;
 
         public BallColor BallColor => ballColor;
         public BallPowerUpType PowerUpType => powerUpType;
@@ -85,6 +87,29 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Sets the ball's frost-stack count (Blue ice-patches synergy). Drives a visual
+        /// tint toward icy white-blue as stacks accumulate.
+        /// </summary>
+        public void SetFrostStacks(int stacks)
+        {
+            frostStacks = Mathf.Max(0, stacks);
+            UpdateVisuals();
+        }
+
+        /// <summary>
+        /// Sets the ball's frozen state. Frozen balls show a heavier icy tint and trigger
+        /// the icicle hook on destruction.
+        /// </summary>
+        public void SetFrozen(bool isFrozen)
+        {
+            frozen = isFrozen;
+            // Frozen balls don't carry frost-stack visual on top of being frozen — the
+            // stack counter is consumed at freeze time.
+            if (isFrozen) frostStacks = 0;
+            UpdateVisuals();
+        }
+
+        /// <summary>
         /// Updates the ball's visual appearance.
         /// Power-up balls override the standard color with a fixed highlight color.
         /// </summary>
@@ -101,10 +126,27 @@ namespace YuumisProwl.BallChain
             {
                 // Golden color so the hammer ball is immediately distinct
                 ballMaterial.color = new Color(1f, 0.85f, 0.1f);
+                return;
+            }
+
+            Color baseColor = BallColorUtils.ToUnityColor(ballColor);
+
+            if (frozen)
+            {
+                // Heavy icy tint — lerp the colour 70% toward a pale ice blue.
+                ballMaterial.color = Color.Lerp(baseColor, new Color(0.75f, 0.95f, 1f), 0.7f);
+            }
+            else if (frostStacks > 0)
+            {
+                // Lighter frost tint that scales with stacks. Threshold is configured in
+                // RunConfig but we cap visual at 3 for safe interpolation if a higher
+                // threshold is in play.
+                float t = Mathf.Clamp01(frostStacks / 3f) * 0.45f;
+                ballMaterial.color = Color.Lerp(baseColor, new Color(0.75f, 0.95f, 1f), t);
             }
             else
             {
-                ballMaterial.color = BallColorUtils.ToUnityColor(ballColor);
+                ballMaterial.color = baseColor;
             }
         }
 
@@ -117,6 +159,8 @@ namespace YuumisProwl.BallChain
             chainIndex = -1;
             powerUpType = BallPowerUpType.None;
             powerUpValue = 0f;
+            frostStacks = 0;
+            frozen = false;
             if (powerUpIndicator != null)
                 powerUpIndicator.SetActive(false);
             transform.position = Vector3.zero;

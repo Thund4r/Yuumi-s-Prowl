@@ -13,10 +13,19 @@ namespace YuumisProwl.Progression
         public int essenceSpent;
         public MetaUpgradeState[] metaUpgrades = new MetaUpgradeState[0];
 
+        /// <summary>
+        /// How many ball colours are unlocked for this profile. The first N entries of
+        /// the BallColor enum are active in runs; the rest are hidden along with their
+        /// colour-synergy upgrades. Starts at PlayerProfileManager.StartingUnlockedColors
+        /// and increments by one each time the player completes a full run.
+        /// </summary>
+        public int unlockedColorCount = 3;
+
         public PlayerProfile()
         {
             essenceTotal = 0;
             essenceSpent = 0;
+            unlockedColorCount = 3;
         }
     }
 

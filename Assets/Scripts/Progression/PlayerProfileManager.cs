@@ -9,6 +9,11 @@ namespace YuumisProwl.Progression
     /// </summary>
     public class PlayerProfileManager : MonoBehaviour
     {
+        /// <summary>How many ball colours a fresh profile starts with unlocked.</summary>
+        public const int StartingUnlockedColors = 3;
+        /// <summary>Hard cap on unlocked colours — must match the BallColor enum length.</summary>
+        public const int MaxUnlockableColors = 5;
+
         private static PlayerProfileManager instance;
         public static PlayerProfile Profile { get; private set; }
 
@@ -54,6 +59,31 @@ namespace YuumisProwl.Progression
                     SaveProfile();
                     Debug.Log("DEBUG: Set essence to 1000");
                 }
+            }
+
+            // Debug: Press Shift+U to unlock the next ball colour
+            if (Input.GetKeyDown(KeyCode.U) && Input.GetKey(KeyCode.LeftShift))
+            {
+                if (UnlockNextColor())
+                    Debug.Log($"DEBUG: Unlocked colour. Total unlocked: {Profile.unlockedColorCount}");
+                else
+                    Debug.Log("DEBUG: Already at max unlocked colours.");
+            }
+
+            // Debug: Press Shift+L to reset colour unlocks to the starting count
+            if (Input.GetKeyDown(KeyCode.L) && Input.GetKey(KeyCode.LeftShift))
+            {
+                if (ResetColorUnlocks())
+                    Debug.Log($"DEBUG: Reset colour unlocks to {StartingUnlockedColors}.");
+                else
+                    Debug.Log($"DEBUG: Colour unlocks already at starting count ({StartingUnlockedColors}).");
+            }
+
+            // Debug: Press Shift+D to wipe the save file entirely (fresh profile)
+            if (Input.GetKeyDown(KeyCode.D) && Input.GetKey(KeyCode.LeftShift))
+            {
+                ResetProfile();
+                Debug.Log("DEBUG: Wiped save file. Profile is now fresh.");
             }
 #endif
         }
@@ -127,6 +157,13 @@ namespace YuumisProwl.Progression
 
             if (profile.essenceTotal < 0) profile.essenceTotal = 0;
             if (profile.essenceSpent < 0) profile.essenceSpent = 0;
+
+            // Older saves (pre-unlock-progression) deserialize this as 0 — clamp up to
+            // the starting count so existing players don't end up with zero colours.
+            if (profile.unlockedColorCount < StartingUnlockedColors)
+                profile.unlockedColorCount = StartingUnlockedColors;
+            if (profile.unlockedColorCount > MaxUnlockableColors)
+                profile.unlockedColorCount = MaxUnlockableColors;
         }
 
         /// <summary>
@@ -193,6 +230,80 @@ namespace YuumisProwl.Progression
             System.Array.Resize(ref Profile.metaUpgrades, newLength);
             Profile.metaUpgrades[newLength - 1] = newUpgrade;
             return newUpgrade;
+        }
+
+        /// <summary>
+        /// Returns the number of ball colours currently unlocked on the profile.
+        /// Clamped to [StartingUnlockedColors, MaxUnlockableColors] for safety.
+        /// </summary>
+        public static int GetUnlockedColorCount()
+        {
+            if (Profile == null) return StartingUnlockedColors;
+            return Mathf.Clamp(Profile.unlockedColorCount, StartingUnlockedColors, MaxUnlockableColors);
+        }
+
+        /// <summary>
+        /// True if the given BallColor's enum index is within the unlocked range.
+        /// </summary>
+        public static bool IsColorUnlocked(BallColor color)
+        {
+            return (int)color < GetUnlockedColorCount();
+        }
+
+        /// <summary>
+        /// Unlocks the next colour (increments unlockedColorCount by 1, up to the cap).
+        /// Returns true if a new colour was actually unlocked, false if already at max.
+        /// Saves on success.
+        /// </summary>
+        public static bool UnlockNextColor()
+        {
+            if (Profile == null) return false;
+            if (Profile.unlockedColorCount >= MaxUnlockableColors) return false;
+
+            Profile.unlockedColorCount++;
+            SaveProfile();
+            Debug.Log($"PlayerProfileManager: unlocked colour #{Profile.unlockedColorCount} of {MaxUnlockableColors}.");
+            return true;
+        }
+
+        /// <summary>
+        /// Wipes the on-disk save file and replaces the in-memory profile with a fresh
+        /// default-state PlayerProfile. Used by the Shift+D debug shortcut for testing.
+        /// Safe to call any time — falls back to creating-new if delete fails.
+        /// </summary>
+        public static void ResetProfile()
+        {
+            try
+            {
+                if (instance != null && !string.IsNullOrEmpty(instance.saveFilePath)
+                    && File.Exists(instance.saveFilePath))
+                {
+                    File.Delete(instance.saveFilePath);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"PlayerProfileManager: failed to delete save file (continuing with in-memory reset) — {e.Message}");
+            }
+
+            Profile = new PlayerProfile();
+            SaveProfile();
+            Debug.Log("PlayerProfileManager: profile wiped — fresh save written.");
+        }
+
+        /// <summary>
+        /// Resets the colour unlock count to the starting value (3). Saves.
+        /// Returns true if anything actually changed.
+        /// </summary>
+        public static bool ResetColorUnlocks()
+        {
+            if (Profile == null) return false;
+            if (Profile.unlockedColorCount == StartingUnlockedColors) return false;
+
+            Profile.unlockedColorCount = StartingUnlockedColors;
+            SaveProfile();
+            Debug.Log($"PlayerProfileManager: reset colour unlocks to {StartingUnlockedColors}.");
+            return true;
         }
 
         /// <summary>

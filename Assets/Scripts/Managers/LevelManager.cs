@@ -44,9 +44,11 @@ namespace YuumisProwl.Managers
         /// persistent systems, and starts the level.
         ///
         /// Optional multipliers scale the map's baseline LevelData values for this load.
-        /// colorCount is intentionally not scaled (reserved for color-synergy upgrades).
+        /// `colorCountCap` (> 0) clamps `LevelData.colorCount` to no more than the cap —
+        /// used by RunManager to enforce the player's currently-unlocked colour count.
+        /// Pass -1 (default) to use the LevelData value unchanged.
         /// </summary>
-        public void LoadMap(Map prefab, float ballSpeedMult = 1f, float totalBallsMult = 1f)
+        public void LoadMap(Map prefab, float ballSpeedMult = 1f, float totalBallsMult = 1f, int colorCountCap = -1)
         {
             if (prefab == null)
             {
@@ -55,10 +57,10 @@ namespace YuumisProwl.Managers
             }
 
             if (loadRoutine != null) StopCoroutine(loadRoutine);
-            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, totalBallsMult));
+            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, totalBallsMult, colorCountCap));
         }
 
-        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, float totalBallsMult)
+        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, float totalBallsMult, int colorCountCap)
         {
             IsTransitioning = true;
 
@@ -92,7 +94,10 @@ namespace YuumisProwl.Managers
 
                 if (ballSpawner != null)
                 {
-                    ballSpawner.SetColorCount(data.colorCount);
+                    int effectiveColorCount = data.colorCount;
+                    if (colorCountCap > 0)
+                        effectiveColorCount = Mathf.Min(effectiveColorCount, colorCountCap);
+                    ballSpawner.SetColorCount(effectiveColorCount);
                     ballSpawner.SetTotalBalls(effectiveTotalBalls);
                 }
             }

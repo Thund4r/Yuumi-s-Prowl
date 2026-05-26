@@ -54,6 +54,10 @@ namespace YuumisProwl.Progression
         [Tooltip("Weight of Bomb vs Pierce when PowerUpChargeTracker awards a power-up. Pierce is always 1.0; higher values bias toward Bomb. Baseline 1.0 = 50/50.")]
         public float BombAwardWeight;
 
+        [Header("Ice Patches (Blue)")]
+        [Tooltip("If true, blue matches drop ice patches that frost-stack passing balls, and destroyed frozen balls spawn icicles. Set by the IcePatches anchor upgrade.")]
+        public bool IcePatchesEnabled;
+
         [Header("Rage Synergy (Purple)")]
         [Tooltip("If true, the rage meter is unlocked. Set by the RageUnlock 'anchor' purple upgrade.")]
         public bool RageEnabled;
@@ -177,6 +181,7 @@ namespace YuumisProwl.Progression
             RedMatchExplosionEnabled = false;
             ExplosionThresholdReduction = 0;
             BombAwardWeight = 1f;
+            IcePatchesEnabled = false;
             RageEnabled = false;
             RageBuildupBonus = 0f;
             RageDurationBonus = 0f;

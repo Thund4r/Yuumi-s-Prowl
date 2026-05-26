@@ -12,18 +12,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
   m_Name: Upgrade_PurpleHomingRange
   m_EditorClassIdentifier: 
-  <UpgradeId>k__BackingField: HomingRange
+  <UpgradeId>k__BackingField: PurpleHomingRange
   <Stat>k__BackingField: 15
-  <UpgradeName>k__BackingField: Homing Range
+  <UpgradeName>k__BackingField: Long Sight
   <Description>k__BackingField: Increases the range where homing occurs
   <Icon>k__BackingField: {fileID: 0}
-  <ModifierValue>k__BackingField: 1.5
-  <TargetColor>k__BackingField: 0
-  <IsColorSynergy>k__BackingField: 0
+  <ModifierValue>k__BackingField: 1
+  <TargetColor>k__BackingField: 3
+  <IsColorSynergy>k__BackingField: 1
   <IsDraftable>k__BackingField: 1
   <IsShoppable>k__BackingField: 1
   <IsMetaShop>k__BackingField: 0
   <MaxRank>k__BackingField: 4
   <ShopCost>k__BackingField: 100
   <RankEssenceCosts>k__BackingField: 
-  <Prerequisites>k__BackingField: []
+  <Prerequisites>k__BackingField:
+  - {fileID: 11400000, guid: af248f4adfcf373488e140de6a0b0ede, type: 2}

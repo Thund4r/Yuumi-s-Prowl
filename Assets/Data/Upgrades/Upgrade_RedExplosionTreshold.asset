@@ -15,7 +15,7 @@ MonoBehaviour:
   <UpgradeId>k__BackingField: RedExplosionThreshold
   <Stat>k__BackingField: 17
   <UpgradeName>k__BackingField: Volatile Balls
-  <Description>k__BackingField: Reduces the matches needed for explosions by 1.
+  <Description>k__BackingField: Reduces the matches needed for explosions by 1
   <Icon>k__BackingField: {fileID: 0}
   <ModifierValue>k__BackingField: 1
   <TargetColor>k__BackingField: 0

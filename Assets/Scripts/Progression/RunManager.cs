@@ -216,8 +216,9 @@ namespace YuumisProwl.Progression
                     float speedReduction = runtimeStats != null ? runtimeStats.BallSpeedReduction : 0f;
                     ballSpeedMult = Mathf.Max(0.1f, ballSpeedMult - speedReduction);
 
-                    Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, totalBalls×{totalBallsMult:F2}");
-                    levelManager.LoadMap(node.mapPrefab, ballSpeedMult, totalBallsMult);
+                    int unlockedColors = PlayerProfileManager.GetUnlockedColorCount();
+                    Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, totalBalls×{totalBallsMult:F2}, colours capped at {unlockedColors}");
+                    levelManager.LoadMap(node.mapPrefab, ballSpeedMult, totalBallsMult, unlockedColors);
                     break;
 
                 case RunNodeType.Shop:
@@ -399,13 +400,19 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
-        /// An upgrade is "available" if it hasn't been acquired up to its MaxRank this run
-        /// AND all of its prerequisite upgrades are already owned.
+        /// An upgrade is "available" if it hasn't been acquired up to its MaxRank this run,
+        /// all of its prerequisite upgrades are already owned, AND its target colour is
+        /// unlocked on the player profile (colour-synergy upgrades for locked colours
+        /// are hidden until the player unlocks the colour).
         /// </summary>
         private bool IsAvailable(UpgradeDefinition upgrade)
         {
             if (state == null) return true;
-            return state.CanAcquire(upgrade) && upgrade.ArePrerequisitesMet(state);
+            if (!state.CanAcquire(upgrade)) return false;
+            if (!upgrade.ArePrerequisitesMet(state)) return false;
+            if (upgrade.IsColorSynergy && !PlayerProfileManager.IsColorUnlocked(upgrade.TargetColor))
+                return false;
+            return true;
         }
 
         private UpgradeDefinition[] PickFilteredUpgrades(int count, System.Func<UpgradeDefinition, bool> predicate)
@@ -465,6 +472,14 @@ namespace YuumisProwl.Progression
             }
 
             GrantEssenceReward(cleared, won);
+
+            // Winning the full run unlocks the next ball colour (no-op once maxed out).
+            if (won)
+            {
+                if (PlayerProfileManager.UnlockNextColor())
+                    Debug.Log("RunManager: full-run clear unlocked a new ball colour.");
+            }
+
             StartCoroutine(ReturnToMenuRoutine());
         }
 

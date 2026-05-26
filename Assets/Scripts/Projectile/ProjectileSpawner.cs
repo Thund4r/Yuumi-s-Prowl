@@ -97,9 +97,25 @@ namespace YuumisProwl.Projectile
                 gameManager.OnGameLost += HandleLevelEnded;
             }
 
+            // Refill the loaded projectile after each level's intro animation finishes.
+            // Combined with ClearActiveProjectiles NOT respawning, this guarantees that
+            // when a run ends (no next intro fires) the player cannot shoot during the
+            // EndRun → main-menu pause.
+            if (ballSpawner != null)
+                ballSpawner.OnIntroComplete += HandleIntroComplete;
+
             // Initialize next color
             nextColor = GetNextColor();
             SpawnNextProjectile();
+        }
+
+        private void HandleIntroComplete()
+        {
+            // Only refill if a prior level-end cleared us out. On the very first intro
+            // (or after a shop node, which doesn't fire OnGameWon/OnGameLost) the
+            // currentProjectile is still loaded — no-op then.
+            if (currentProjectile == null)
+                SpawnNextProjectile();
         }
 
         private void HandlePowerUpEquipped(PowerUpType type)
@@ -350,9 +366,13 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// Forces any in-flight or loaded projectile back to the pool and loads a fresh one.
-        /// Called on GameManager.OnGameWon / OnGameLost so a shot launched right before a
-        /// level ends can't carry over and insert into the next level's chain mid-intro.
+        /// Forces any in-flight or loaded projectile back to the pool. Called on
+        /// GameManager.OnGameWon / OnGameLost so a shot launched right before a level
+        /// ends can't carry over and insert into the next level's chain mid-intro.
+        ///
+        /// Deliberately does NOT spawn a replacement — that happens via HandleIntroComplete
+        /// after the next level's intro plays. On the final-run win there is no next intro,
+        /// so the player has no loaded shot during the EndRun → main-menu pause.
         /// </summary>
         public void ClearActiveProjectiles()
         {
@@ -372,8 +392,6 @@ namespace YuumisProwl.Projectile
                 currentProjectile.OnReturnToPool();
                 currentProjectile = null;
             }
-
-            SpawnNextProjectile();
         }
 
         private void HandleLevelEnded()
@@ -391,6 +409,9 @@ namespace YuumisProwl.Projectile
                 gameManager.OnGameWon  -= HandleLevelEnded;
                 gameManager.OnGameLost -= HandleLevelEnded;
             }
+
+            if (ballSpawner != null)
+                ballSpawner.OnIntroComplete -= HandleIntroComplete;
 
             if (projectilePool != null)
             {

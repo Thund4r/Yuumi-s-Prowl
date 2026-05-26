@@ -12,9 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 01e09cc3150b1964487c5ad74228da04, type: 3}
   m_Name: Map_01_data
   m_EditorClassIdentifier: 
-  levelName: Level 1
+  levelName: Map_01
   totalBalls: 90
-  colorCount: 2
+  colorCount: 5
   ballSpeed: 0.7
-  nextSceneName: Level 2
-  retrySceneName: 
