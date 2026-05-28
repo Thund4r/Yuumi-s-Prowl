@@ -6,8 +6,10 @@ namespace YuumisProwl.Managers
     /// <summary>
     /// Handles game state and win/lose conditions.
     /// Win conditions:
-    ///   1. Chain cleared and no more balls to spawn (all matched).
-    ///   2. No visible balls on screen (line retreated fully into hole).
+    ///   1. MatchProcessor.OnChainCleared event fires (fast path for match/bomb/pierce).
+    ///   2. Per-frame robust check: chain is empty after gameplay has started — catches
+    ///      icicles and any other path that removes balls without firing OnChainCleared.
+    ///   3. Per-frame retreat check: balls exist but none visible (chain pulled back into hole).
     /// Lose condition:
     ///   Lead ball reaches the end of the path.
     /// </summary>
@@ -21,6 +23,7 @@ namespace YuumisProwl.Managers
         // Game state
         private bool gameOver = false;
         private bool levelComplete = false;
+        private bool gameplayStarted = false;
 
         // Events
         public System.Action OnGameWon;
@@ -45,19 +48,28 @@ namespace YuumisProwl.Managers
 
             matchProcessor.OnChainCleared += HandleChainCleared;
             ballChainManager.OnBallReachedEnd += HandleBallReachedEnd;
+            if (ballSpawner != null)
+                ballSpawner.OnIntroComplete += HandleIntroComplete;
         }
 
         private void Update()
         {
             if (gameOver || levelComplete) return;
 
-            // Win if every ball in the chain has retreated behind the hole (none visible).
-            // AllBallsSpawned is intentionally NOT checked here: recoil stops tail spawning
-            // before the total is reached, so that flag would never become true in this scenario.
             bool introPlaying = ballSpawner != null && ballSpawner.IsPlayingIntro;
-            if (!introPlaying
-                && ballChainManager.BallCount > 0
-                && !ballChainManager.HasVisibleBalls())
+            if (introPlaying) return;
+
+            // Robust empty-chain win: any path that empties the chain after gameplay has
+            // started counts as a win, even if OnChainCleared wasn't fired (e.g. icicles,
+            // future synergies, anything that calls RemoveBallAtIndex directly).
+            if (gameplayStarted && ballChainManager.BallCount == 0)
+            {
+                WinGame();
+                return;
+            }
+
+            // Retreat win: balls exist but none are visible (chain fully pulled back into the hole).
+            if (ballChainManager.BallCount > 0 && !ballChainManager.HasVisibleBalls())
             {
                 WinGame();
             }
@@ -69,6 +81,8 @@ namespace YuumisProwl.Managers
                 matchProcessor.OnChainCleared -= HandleChainCleared;
             if (ballChainManager != null)
                 ballChainManager.OnBallReachedEnd -= HandleBallReachedEnd;
+            if (ballSpawner != null)
+                ballSpawner.OnIntroComplete -= HandleIntroComplete;
         }
 
         /// <summary>
@@ -78,7 +92,13 @@ namespace YuumisProwl.Managers
         {
             gameOver = false;
             levelComplete = false;
+            gameplayStarted = false;
             Debug.Log("Game initialised.");
+        }
+
+        private void HandleIntroComplete()
+        {
+            gameplayStarted = true;
         }
 
         /// <summary>

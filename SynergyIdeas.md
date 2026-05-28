@@ -246,6 +246,47 @@ clear the final floor.
   colours? (Probably the latter — keeps authoring and progression cleanly
   separated.)
 
+### Pre-run colour loadout (a.k.a. "player-built ball chain")
+
+Replace the fixed first-N-of-the-enum unlock rule with a **player-built
+loadout** screen between runs. As the player unlocks colours, they can
+choose which ones go into the active palette for the next run.
+
+- **Loadout UI**: a stationary or slowly-rotating ring of "slots" — a visual
+  ball chain on the main menu. The player drags unlocked colour orbs in to
+  add them to the run, or out to remove them. Acts as the inventory + run
+  config in one widget.
+- **Minimum 3 colours.** Below that, the puzzle stops working — no matches
+  to be made.
+- **Higher colour count = harder run.** Spawn pool widens, fewer 3-in-a-row
+  chances per draw. The colour ring is effectively a self-set difficulty
+  slider.
+- **Synergy-aware build crafting.** Player picks their synergy strategy at
+  loadout time: drop in Red+Purple for explosive homing, swap Purple for
+  Blue for an ice deck, etc. Pairs with the colour-synergy upgrade pool —
+  drafting a Purple synergy upgrade is only useful if Purple is in the
+  loadout.
+- **Reward hook**: more colours in the run could grant a passive bonus
+  (extra essence at run end? a bonus draft? bigger gold rewards?) so the
+  player isn't always incentivised to play the easiest 3-colour run.
+
+**Implementation notes:**
+- `PlayerProfile.unlockedColorCount` becomes `unlockedColors[]` (per-colour
+  bool array) — generalises the count to an explicit set.
+- A new `ActiveColors[]` runtime palette on `RuntimeStats` — the loadout
+  writes this at run-start.
+- `BallSpawner` / `ProjectileSpawner` colour pickers consult `ActiveColors`
+  instead of "first N enum entries". `BallColorUtils.GetRandomColor` and
+  `GetWeightedRandomColor` need a "from this allowed-set" overload.
+- Loadout UI lives on the main menu scene. Drag-and-drop pattern (Unity UI
+  drag handlers) on coloured orb prefabs.
+- Reward bonus hooks tie into the existing essence-reward formula in
+  `RunManager.GrantEssenceReward`.
+
+Lots of upside — gives meta-progression a tactile, player-driven shape and
+naturally introduces "deck building" without needing a separate system.
+Holdup is UI work + the enum-to-bool-array migration.
+
 ---
 
 ## Discarded directions

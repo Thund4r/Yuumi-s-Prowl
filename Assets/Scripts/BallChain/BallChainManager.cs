@@ -270,6 +270,19 @@ namespace YuumisProwl.BallChain
                         }
                         behind.balls.Clear();
                         segments.RemoveAt(s);
+
+                        // Snap appended balls into tight spacing now, but record the
+                        // displacement in smoothShift so they visually slide into their
+                        // new positions instead of teleporting on the next propagation.
+                        for (int i = boundaryLocal; i < ahead.balls.Count; i++)
+                        {
+                            var node = ahead.balls[i];
+                            float oldProgress = node.pathProgress;
+                            float newProgress = ahead.balls[i - 1].pathProgress - spacingProgress;
+                            node.pathProgress = newProgress;
+                            node.smoothShift += oldProgress - newProgress;
+                        }
+
                         UpdateChainIndices();
 
                         // Notify subscribers — handler may modify the segments list
@@ -678,7 +691,7 @@ namespace YuumisProwl.BallChain
             float pathLength = pathController.GetPathLength();
             float spacingProgress = ballSpacing / pathLength;
 
-            float insertAt = anchor.pathProgress - spacingProgress;
+            float insertAt = anchor.pathProgress;
 
             BallNode newNode = new BallNode(ball, insertAt, 0);
             newNode.segmentId = seg.id;
@@ -713,7 +726,11 @@ namespace YuumisProwl.BallChain
                     var node = segment.balls[i];
                     if (node.ball == null) continue;
 
-                    bool shouldBeVisible = node.pathProgress >= holeProgress;
+                    // Include smoothShift so balls whose visual position is above the hole
+                    // stay enabled even when their underlying pathProgress is below — e.g.
+                    // after a merge that snapped pathProgress down while leaving smoothShift
+                    // to preserve the visual position.
+                    bool shouldBeVisible = node.pathProgress + node.smoothShift >= holeProgress;
                     if (node.ball.gameObject.activeSelf != shouldBeVisible)
                         node.ball.gameObject.SetActive(shouldBeVisible);
                 }
@@ -727,7 +744,8 @@ namespace YuumisProwl.BallChain
                 var segment = segments[s];
                 for (int i = 0; i < segment.Count; i++)
                 {
-                    if (segment.balls[i].pathProgress >= holeProgress) return true;
+                    var node = segment.balls[i];
+                    if (node.pathProgress + node.smoothShift >= holeProgress) return true;
                 }
             }
             return false;

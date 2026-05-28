@@ -320,20 +320,57 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
-        /// Gets the next color for projectiles.
+        /// Picks the next projectile colour. Uses the same `RuntimeStats.ColorWeights`
+        /// as the ball spawner (so projectile colours follow the same intended
+        /// distribution as the chain), but zeroes out the weight of any colour that
+        /// isn't currently present in the chain. Net effect:
+        ///   - A colour that's been completely cleared from the chain stops generating
+        ///     projectiles until tail spawns put one back.
+        ///   - The mix of remaining projectile colours matches the spawn-weight ratio
+        ///     of the colours still in play (not the chain's instantaneous composition).
+        /// If every colour is absent (empty chain), falls through to uniform pick so the
+        /// next-projectile preview always has something to show.
         /// </summary>
         private BallColor GetNextColor()
         {
-            if (randomColors)
+            if (!randomColors) return fixedColor;
+
+            int maxColors = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
+            if (maxColors <= 1) return (BallColor)0;
+
+            // Start from the spawn weights — same source the ball spawner uses for tail balls.
+            float[] weights = new float[maxColors];
+            for (int i = 0; i < maxColors; i++)
+                weights[i] = runtimeStats != null ? runtimeStats.GetColorWeight((BallColor)i) : 1f;
+
+            // Mark which colours are currently in the chain.
+            if (ballChainManager != null)
             {
-                int maxColors = (ballSpawner != null) ? ballSpawner.ColorCount : 4;
-                // Bias projectile colors by the same per-run ColorWeights as the chain,
-                // so a "more common" color is also more likely to be loaded.
-                if (runtimeStats != null)
-                    return BallColorUtils.PickWeightedColor(maxColors, runtimeStats.ColorWeights);
-                return (BallColor)Random.Range(0, maxColors);
+                bool[] present = new bool[maxColors];
+                var segments = ballChainManager.GetSegments();
+                if (segments != null)
+                {
+                    for (int s = 0; s < segments.Count; s++)
+                    {
+                        var seg = segments[s];
+                        for (int i = 0; i < seg.balls.Count; i++)
+                        {
+                            var node = seg.balls[i];
+                            if (node == null || node.ball == null) continue;
+                            int idx = (int)node.ball.BallColor;
+                            if (idx >= 0 && idx < maxColors) present[idx] = true;
+                        }
+                    }
+                }
+
+                // Gate the spawn weights by chain presence. Absent colours go to 0.
+                for (int i = 0; i < maxColors; i++)
+                    if (!present[i]) weights[i] = 0f;
             }
-            return fixedColor;
+
+            // PickWeightedColor falls back to uniform if every weight is 0 (e.g. empty
+            // chain during a level transition), so no further fallback needed here.
+            return BallColorUtils.PickWeightedColor(maxColors, weights);
         }
 
         /// <summary>

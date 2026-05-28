@@ -68,3 +68,17 @@ MonoBehaviour:
     m_RotationOrder: 4
   baseGoldPerFloor: 30
   goldPerCascadeBonus: 5
+  baseExplosionRadius: 3
+  explosionRadiusPerRedUpgrade: 0.5
+  redMatchExplosionThreshold: 4
+  colorWeightPerSynergyUpgrade: 1
+  icePatchRadius: 1.5
+  icePatchDuration: 5
+  iceFreezeStackThreshold: 3
+  icePatchReentryCooldown: 2
+  icicleSpeed: 8
+  icicleArrivalDistance: 0.4
+  rageLoosePurpleCount: 3
+  rageMeterMax: 100
+  rageGainPerBall: 10
+  rageDuration: 5
