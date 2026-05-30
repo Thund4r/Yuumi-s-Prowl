@@ -249,6 +249,11 @@ namespace YuumisProwl.Progression
             int redCount = runtimeStats.GetColorSynergyCount(BallColor.Red);
             runtimeStats.ExplosionRadius = config.baseExplosionRadius
                                            + redCount * config.explosionRadiusPerRedUpgrade;
+
+            // Arc bounces — count-scaled by orange synergy upgrades.
+            int orangeCount = runtimeStats.GetColorSynergyCount(BallColor.Orange);
+            runtimeStats.ArcBounces = config.baseArcBounces
+                                      + orangeCount * config.arcBouncesPerOrangeUpgrade;
         }
 
         private void OpenShop()

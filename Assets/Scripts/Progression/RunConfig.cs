@@ -102,6 +102,31 @@ namespace YuumisProwl.Progression
         [Tooltip("Base seconds rage stays active once triggered (before bonuses).")]
         [Min(0.1f)] public float rageDuration = 5f;
 
+        [Header("Conductor Synergy (Orange)")]
+        [Tooltip("Base number of balls an arc hops through before any orange synergy upgrades.")]
+        [Min(1)] public int baseArcBounces = 3;
+
+        [Tooltip("Extra arc hops per orange colour-synergy upgrade owned (count-scaling knob).")]
+        [Min(0)] public int arcBouncesPerOrangeUpgrade = 1;
+
+        [Tooltip("Maximum world-space distance an arc can hop from the current point to the next ball.")]
+        [Min(0.1f)] public float arcRange = 3f;
+
+        [Tooltip("Rage added per arc hop when charging a purple ball (scaled by arc charge units).")]
+        [Min(0f)] public float arcRageGain = 5f;
+
+        [Tooltip("Arc hops needed to prime a red ball (ignite threshold). A primed red leaves a mini-explosion when destroyed.")]
+        [Min(1)] public int igniteThreshold = 3;
+
+        [Tooltip("World-space radius of the mini-explosion a primed red leaves when destroyed. Tune well below explosion radius.")]
+        [Min(0.1f)] public float igniteMiniRadius = 1f;
+
+        [Tooltip("Static stacks an arc must apply to a ball whose colour has no active synergy before it pops (baseline). Not upgradeable.")]
+        [Min(1)] public int staticThreshold = 3;
+
+        [Tooltip("Every Nth arc applies double charge when the Supercharge upgrade is owned.")]
+        [Min(1)] public int superchargeEveryNth = 3;
+
         /// <summary>
         /// Safe sampler — returns 1.0 when the curve has no keyframes so an unconfigured
         /// asset doesn't silently zero out gameplay values.

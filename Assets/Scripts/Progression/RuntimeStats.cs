@@ -80,6 +80,18 @@ namespace YuumisProwl.Progression
         [Tooltip("Additive seconds removed from the projectile spawn cooldown — faster firing.")]
         public float FireRateBonus;
 
+        [Header("Conductor Synergy (Orange)")]
+        [Tooltip("If true, orange matches fire a bouncing arc that charges other colours' synergies. Set by the Conductor anchor upgrade.")]
+        public bool ConductorEnabled;
+        [Tooltip("How many balls an arc hops through. Count-scaled by RunManager from the number of orange synergy upgrades owned; not an upgrade card.")]
+        public int ArcBounces;
+        [Tooltip("Extra charge units applied per arc hop to COLOUR synergies (frost/ignite/rage), on top of the base 1. Does NOT affect the static baseline. From the Resonance upgrade.")]
+        public int ArcResonanceBonus;
+        [Tooltip("If true, every Nth arc applies double charge (Supercharge upgrade).")]
+        public bool SuperchargeEnabled;
+        [Tooltip("If true, an arc hop onto an already-charged ball applies one extra stack (Overload upgrade).")]
+        public bool OverloadEnabled;
+
         [Header("Cached per-floor")]
         [Tooltip("Count of colour-synergy upgrades owned, indexed by BallColor. Populated by RunManager.RecomputeSynergyStats() each floor load.")]
         public int[] ColorSynergyCounts;
@@ -204,6 +216,11 @@ namespace YuumisProwl.Progression
             RageBuildupBonus = 0f;
             RageDurationBonus = 0f;
             FireRateBonus = 0f;
+            ConductorEnabled = false;
+            ArcBounces = 0;
+            ArcResonanceBonus = 0;
+            SuperchargeEnabled = false;
+            OverloadEnabled = false;
             ColorSynergyCounts = new int[ColorCount];
 
             // Rebuild color-synergy arrays — weights baseline 1.0, match-gold baseline 0.

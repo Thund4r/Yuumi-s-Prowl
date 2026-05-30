@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -103,6 +104,11 @@ namespace YuumisProwl.Projectile
             // EndRun → main-menu pause.
             if (ballSpawner != null)
                 ballSpawner.OnIntroComplete += HandleIntroComplete;
+
+            // Keep projectile colours honest as the chain's colour set changes (matches clearing
+            // a colour should re-roll a loaded projectile of that now-absent colour).
+            if (matchProcessor != null)
+                matchProcessor.OnBallsDestroyed += HandleBallsDestroyed;
 
             // Initialize next color
             nextColor = GetNextColor();
@@ -374,6 +380,46 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
+        /// When a match clears balls, keep projectile colours in sync with the chain: refresh the
+        /// upcoming colour, and re-roll the *loaded* projectile if its colour is no longer present
+        /// anywhere in the chain (so the player never holds a colour that isn't in play). Deferred
+        /// one frame so the match's removals have fully settled before we test presence.
+        /// </summary>
+        private void HandleBallsDestroyed(int count, BallColor color)
+        {
+            if (!randomColors || !isActiveAndEnabled) return;
+            StartCoroutine(RefreshColorsNextFrame());
+        }
+
+        private IEnumerator RefreshColorsNextFrame()
+        {
+            yield return null;
+            nextColor = GetNextColor();
+            if (currentProjectile != null && !IsColorInChain(currentProjectile.ProjectileColor))
+                currentProjectile.SetColor(GetNextColor());
+        }
+
+        /// <summary>True if any visible ball in the chain currently has the given colour.</summary>
+        private bool IsColorInChain(BallColor color)
+        {
+            if (ballChainManager == null) return true;
+            var segments = ballChainManager.GetSegments();
+            if (segments == null) return false;
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var seg = segments[s];
+                for (int i = 0; i < seg.balls.Count; i++)
+                {
+                    var node = seg.balls[i];
+                    if (node?.ball == null) continue;
+                    if (!node.ball.gameObject.activeInHierarchy) continue;
+                    if (node.ball.BallColor == color) return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Returns a projectile to the pool.
         /// Called by the projectile itself when it hits a ball.
         /// </summary>
@@ -449,6 +495,9 @@ namespace YuumisProwl.Projectile
 
             if (ballSpawner != null)
                 ballSpawner.OnIntroComplete -= HandleIntroComplete;
+
+            if (matchProcessor != null)
+                matchProcessor.OnBallsDestroyed -= HandleBallsDestroyed;
 
             if (projectilePool != null)
             {

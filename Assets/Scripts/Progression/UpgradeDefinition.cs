@@ -53,6 +53,10 @@ namespace YuumisProwl.Progression
         FrostThresholdReduction      = 27, // raw int — lowers iceFreezeStackThreshold, floored at 1. Prereq: IcePatches.
         BlueChainSlowdown            = 28, // flag — every blue synergy upgrade slows the chain briefly after blue matches (count-scaled magnitude). Prereq: IcePatches.
         BlueSlowdownDuration         = 29, // raw float — extra seconds added to the chain-slowdown window after a blue match. Prereq: BlueChainSlowdown.
+        Conductor                    = 30, // flag — anchor orange upgrade: orange matches fire a bouncing arc that charges other colours' synergies.
+        ArcResonance                 = 31, // raw int — extra charge units per arc hop to colour synergies (frost/ignite/rage). Prereq: Conductor.
+        Supercharge                  = 32, // flag — every Nth arc applies double charge. Prereq: Conductor.
+        Overload                     = 33, // flag — arc hops onto already-charged balls apply +1 stack. Prereq: Conductor.
     }
 
     [CreateAssetMenu(fileName = "Upgrade_", menuName = "Yuumi/Upgrade Definition")]
@@ -202,6 +206,18 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.BlueSlowdownDuration:
                     stats.BlueSlowdownDurationBonus += total;
                     break;
+                case UpgradeStat.Conductor:
+                    stats.ConductorEnabled = true;
+                    break;
+                case UpgradeStat.ArcResonance:
+                    stats.ArcResonanceBonus += Mathf.RoundToInt(total);
+                    break;
+                case UpgradeStat.Supercharge:
+                    stats.SuperchargeEnabled = true;
+                    break;
+                case UpgradeStat.Overload:
+                    stats.OverloadEnabled = true;
+                    break;
             }
         }
 
@@ -278,6 +294,8 @@ namespace YuumisProwl.Progression
                     return $"-{total:F2}s fire cooldown";
                 case UpgradeStat.HomingRange:
                     return $"+{total:F1} homing range";
+                case UpgradeStat.ArcResonance:
+                    return $"+{Mathf.RoundToInt(total)} arc charge";
                 case UpgradeStat.ShopReroll:
                 case UpgradeStat.RedMatchExplosion:
                 case UpgradeStat.RageUnlock:
@@ -286,6 +304,9 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.CryoBurstChain:
                 case UpgradeStat.FreezeTheHunted:
                 case UpgradeStat.BlueChainSlowdown:
+                case UpgradeStat.Conductor:
+                case UpgradeStat.Supercharge:
+                case UpgradeStat.Overload:
                     return "Enabled";
                 default:
                     return "—";

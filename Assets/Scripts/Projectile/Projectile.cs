@@ -134,6 +134,17 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
+        /// Re-colours a loaded (not-yet-launched) projectile — used by ProjectileSpawner when this
+        /// projectile's colour has been cleared from the chain, so the player never holds a colour
+        /// that isn't in play. (Power-up visuals still override the displayed colour.)
+        /// </summary>
+        public void SetColor(BallColor color)
+        {
+            projectileColor = color;
+            UpdateVisuals();
+        }
+
+        /// <summary>
         /// Equips a power-up on this projectile. Call after Initialize, before Launch.
         /// For Pierce, pierceDistance caps how far the projectile travels before despawning,
         /// speedMultiplier scales its flight speed, and widthMultiplier scales the cast radius.
@@ -236,6 +247,7 @@ namespace YuumisProwl.Projectile
                 {
                     var node = balls[i];
                     if (node.ball == null) continue;
+                    if (!node.ball.gameObject.activeInHierarchy) continue; // skip invisible queue balls below the hole
                     if (node.ball.PowerUpType != BallPowerUpType.None) continue; // skip hammers etc.
                     if (node.ball.BallColor != projectileColor) continue;
 
@@ -258,13 +270,13 @@ namespace YuumisProwl.Projectile
             if (i > 0)
             {
                 var n = balls[i - 1].ball;
-                if (n != null && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
+                if (n != null && n.gameObject.activeInHierarchy && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
                     return true;
             }
             if (i < balls.Count - 1)
             {
                 var n = balls[i + 1].ball;
-                if (n != null && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
+                if (n != null && n.gameObject.activeInHierarchy && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
                     return true;
             }
             return false;

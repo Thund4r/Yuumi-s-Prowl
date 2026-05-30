@@ -14,9 +14,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   mapPool:
   - {fileID: 3040890633578842797, guid: 7d892c9ae710aef42a30dca5a3465926, type: 3}
-  mapCount: 5
+  mapCount: 8
   allowDuplicates: 1
-  shopFloorIndices: 0100000003000000
+  shopFloorIndices: 010000000300000005000000
   shopRerollCost: 25
   ballSpeedCurve:
     serializedVersion: 2
@@ -78,7 +78,20 @@ MonoBehaviour:
   icePatchReentryCooldown: 2
   icicleSpeed: 8
   icicleArrivalDistance: 0.4
+  cryoBurstRadius: 2
+  cryoBurstDuration: 0.4
+  blueSlowdownBaseDuration: 1
+  blueSlowdownPerUpgrade: 0.1
+  blueSlowdownMinMultiplier: 0.3
   rageLoosePurpleCount: 3
   rageMeterMax: 100
   rageGainPerBall: 10
   rageDuration: 5
+  baseArcBounces: 1
+  arcBouncesPerOrangeUpgrade: 1
+  arcRange: 3
+  arcRageGain: 5
+  igniteThreshold: 3
+  igniteMiniRadius: 1
+  staticThreshold: 3
+  superchargeEveryNth: 3

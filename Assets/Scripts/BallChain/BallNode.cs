@@ -32,6 +32,22 @@ namespace YuumisProwl.BallChain
         /// so IceSynergy can spawn an icicle.
         /// </summary>
         public bool isFrozen;
+        /// <summary>
+        /// Orange Conductor synergy: ignite stacks this red ball has accrued from arcs.
+        /// At the ignite threshold the ball becomes primed.
+        /// </summary>
+        public int igniteStacks;
+        /// <summary>
+        /// True once the ball is primed (ignite threshold reached). A primed ball leaves a
+        /// mini-explosion when destroyed by any means — BallChainManager fires
+        /// OnIgnitedBallDestroyed so ArcSynergy can detonate it.
+        /// </summary>
+        public bool primed;
+        /// <summary>
+        /// Orange Conductor baseline: static stacks applied by arcs to balls whose colour has
+        /// no active synergy. At RunConfig.staticThreshold the ball pops (weak single removal).
+        /// </summary>
+        public int staticStacks;
 
         public BallNode(Ball ball, float pathProgress, int chainIndex)
         {
@@ -43,6 +59,9 @@ namespace YuumisProwl.BallChain
             this.worldOffset = Vector3.zero;
             this.freezeStacks = 0;
             this.isFrozen = false;
+            this.igniteStacks = 0;
+            this.primed = false;
+            this.staticStacks = 0;
         }
     }
 }

@@ -12,11 +12,10 @@ namespace YuumisProwl.Progression
     /// meter resets and must refill. Non-purple matches do not contribute — purple synergy
     /// self-reinforces.
     ///
-    /// Gating by RuntimeStats.RageEnabled (set by the RageUnlock anchor upgrade) and the
-    /// purple synergy count (RuntimeStats.ColorSynergyCounts[Purple]):
-    ///   - RageEnabled = false         → rage meter never activates.
-    ///   - RageEnabled = true          → rage activates; rage window grants **strict** homing.
-    ///   - rageLoosePurpleCount+       → rage window grants **loose** homing + multi-fire.
+    /// Gating by RuntimeStats.RageEnabled (set by the RageUnlock anchor upgrade):
+    ///   - RageEnabled = false → rage meter never activates.
+    ///   - RageEnabled = true  → rage activates; the rage window ALWAYS grants **loose**
+    ///                           homing (subsumes strict) + multi-fire / rapid fire.
     ///
     /// Round-end refund: if the round ends (win or lose) while rage is active, the meter
     /// stops immediately and returns the *fraction of unused timer* back to CurrentRage —
@@ -126,6 +125,25 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
+        /// Adds rage directly (Orange Conductor charging purple). Respects the same gates as
+        /// match-driven fill: no-op while locked, active, or already full.
+        /// </summary>
+        public void AddRage(float amount)
+        {
+            if (!IsUnlocked || IsActive || amount <= 0f) return;
+            if (CurrentRage >= MaxRage) return;
+
+            CurrentRage = Mathf.Min(MaxRage, CurrentRage + amount);
+            OnRageChanged?.Invoke(CurrentRage, MaxRage);
+
+            if (CurrentRage >= MaxRage)
+            {
+                OnRageReady?.Invoke();
+                Debug.Log("RageMeter: ready (arc-charged) — awaiting activation input.");
+            }
+        }
+
+        /// <summary>
         /// Activates rage if the meter is ready. Safe to call any time — no-op if not ready.
         /// UI buttons should hook their OnClick here.
         /// </summary>
@@ -192,32 +210,14 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
-        /// Flips RuntimeStats homing flags on/off. While rage is active, the loose tier is
-        /// granted at high purple count; otherwise the strict tier; off entirely outside rage.
+        /// Flips RuntimeStats homing flags on/off. Rage always grants loose homing (which
+        /// subsumes strict) plus multi-fire / rapid fire; both off outside rage.
         /// </summary>
         private void ApplyHomingFlags(bool on)
         {
             if (runtimeStats == null) return;
-            if (!on)
-            {
-                runtimeStats.HomingStrictEnabled = false;
-                runtimeStats.HomingLooseEnabled = false;
-                return;
-            }
-
-            int purpleCount = GetPurpleCount();
-            int looseThreshold = config != null ? config.rageLoosePurpleCount : 3;
-            if (purpleCount >= looseThreshold)
-            {
-                // Loose subsumes strict; multi-fire kicks in via HomingLooseEnabled.
-                runtimeStats.HomingStrictEnabled = true;
-                runtimeStats.HomingLooseEnabled = true;
-            }
-            else
-            {
-                runtimeStats.HomingStrictEnabled = true;
-                runtimeStats.HomingLooseEnabled = false;
-            }
+            runtimeStats.HomingStrictEnabled = on;
+            runtimeStats.HomingLooseEnabled = on;
         }
 
         private int GetPurpleCount()

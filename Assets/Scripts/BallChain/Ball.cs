@@ -30,6 +30,12 @@ namespace YuumisProwl.BallChain
         [Tooltip("Colour the overlay swaps to once the ball is fully frozen. Replaces the prefab's authored colour for the duration of the frozen state.")]
         [SerializeField] private Color frozenColor = new Color(0.5f, 0.85f, 1f, 1f);
 
+        [Header("Ignite Visuals (Orange Conductor)")]
+        [Tooltip("Ember tint a ball lerps toward as it accrues ignite stacks; snaps to full once primed. Tints the base material directly (red→hot-orange reads as 'heating up').")]
+        [SerializeField] private Color primedTint = new Color(1f, 0.55f, 0.05f, 1f);
+        [Tooltip("Per-stack fraction of the lerp toward primedTint before the ball is primed.")]
+        [Range(0f, 1f)] [SerializeField] private float igniteTintPerStack = 0.25f;
+
         // Cached renderers + instanced materials on the frozen overlay so we can drive
         // their alpha at runtime without mutating the shared material asset.
         private Renderer[] frostOverlayRenderers;
@@ -45,6 +51,8 @@ namespace YuumisProwl.BallChain
         private float powerUpValue = 0f;
         private int frostStacks = 0;
         private bool frozen = false;
+        private int igniteStacks = 0;
+        private bool primed = false;
 
         public BallColor BallColor => ballColor;
         public BallPowerUpType PowerUpType => powerUpType;
@@ -151,6 +159,20 @@ namespace YuumisProwl.BallChain
             UpdateFrostOverlay();
         }
 
+        /// <summary>Sets the ball's ignite-stack count (Orange Conductor). Drives the ember tint.</summary>
+        public void SetIgniteStacks(int stacks)
+        {
+            igniteStacks = Mathf.Max(0, stacks);
+            UpdateVisuals();
+        }
+
+        /// <summary>Marks the ball primed (ignite threshold reached) — snaps to the full ember tint.</summary>
+        public void SetPrimed(bool isPrimed)
+        {
+            primed = isPrimed;
+            UpdateVisuals();
+        }
+
         /// <summary>
         /// Brief alpha-flash on the frost overlay — used by cryo burst to confirm
         /// "this ball just got hit by the ring." Pulses to full alpha, then restores
@@ -169,6 +191,41 @@ namespace YuumisProwl.BallChain
             SetFrostOverlayAlpha(1f);
             yield return new WaitForSeconds(duration);
             UpdateFrostOverlay();
+        }
+
+        /// <summary>
+        /// Brief white "zap" flash on the ball's base material — used by the Conductor arc to show
+        /// "this ball just got struck." Flashes toward white, then eases back to the resting colour
+        /// (base colour + ignite tint).
+        /// </summary>
+        public void FlashZap(float duration = 0.18f)
+        {
+            if (ballMaterial == null || !gameObject.activeInHierarchy) return;
+            StartCoroutine(FlashZapRoutine(duration));
+        }
+
+        private System.Collections.IEnumerator FlashZapRoutine(float duration)
+        {
+            Color resting = powerUpType == BallPowerUpType.Hammer
+                ? new Color(1f, 0.85f, 0.1f)
+                : ApplyIgniteTint(BallColorUtils.ToUnityColor(ballColor));
+
+            float half = Mathf.Max(0.01f, duration * 0.5f);
+            float t = 0f;
+            while (t < half)
+            {
+                t += Time.deltaTime;
+                if (ballMaterial != null) ballMaterial.color = Color.Lerp(resting, Color.white, t / half);
+                yield return null;
+            }
+            t = 0f;
+            while (t < half)
+            {
+                t += Time.deltaTime;
+                if (ballMaterial != null) ballMaterial.color = Color.Lerp(Color.white, resting, t / half);
+                yield return null;
+            }
+            UpdateVisuals();
         }
 
         private void UpdateFrostOverlay()
@@ -239,7 +296,16 @@ namespace YuumisProwl.BallChain
                 return;
             }
 
-            ballMaterial.color = BallColorUtils.ToUnityColor(ballColor);
+            ballMaterial.color = ApplyIgniteTint(BallColorUtils.ToUnityColor(ballColor));
+        }
+
+        /// <summary>Blends the base colour toward primedTint by ignite progress (full when primed).</summary>
+        private Color ApplyIgniteTint(Color baseColor)
+        {
+            if (primed) return primedTint;
+            if (igniteStacks > 0)
+                return Color.Lerp(baseColor, primedTint, Mathf.Clamp01(igniteStacks * igniteTintPerStack));
+            return baseColor;
         }
 
         /// <summary>
@@ -253,6 +319,8 @@ namespace YuumisProwl.BallChain
             powerUpValue = 0f;
             frostStacks = 0;
             frozen = false;
+            igniteStacks = 0;
+            primed = false;
             if (powerUpIndicator != null)
                 powerUpIndicator.SetActive(false);
             if (frozenOverlay != null)
