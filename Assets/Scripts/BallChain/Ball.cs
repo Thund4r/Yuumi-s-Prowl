@@ -23,21 +23,19 @@ namespace YuumisProwl.BallChain
         [SerializeField] private GameObject powerUpIndicator;
 
         [Header("Frost / Frozen Visuals (Blue Ice Patches)")]
-        [Tooltip("Child GameObject (ice-block prefab) overlaid on the ball. Its renderer material's alpha and its localScale are driven by frost stacks (partial) / frozen state (full). Material MUST use a transparency-capable shader.")]
+        [Tooltip("Child GameObject (ice-block prefab) overlaid on the ball. Its renderer material's alpha is driven by frost stacks; on freeze the colour swaps to frozenColor. Material MUST use a transparency-capable shader.")]
         [SerializeField] private GameObject frozenOverlay;
         [Tooltip("Per-stack fraction of the prefab material's authored alpha. e.g. 0.1 = stack 1 shows at 10% of the prefab alpha, stack 2 at 20%, frozen snaps to 100%.")]
         [Range(0f, 1f)] [SerializeField] private float frostAlphaPerStack = 0.1f;
-        [Tooltip("Scale (% of prefab's authored localScale) added per frost stack. e.g. 0.33 = stack 1 is 33%, stack 2 is 66%, stack 3 is 100%. Clamped at frozenScale.")]
-        [Range(0f, 1f)] [SerializeField] private float frostScalePerStack = 0.33f;
-        [Tooltip("Scale when fully frozen, as a fraction of the prefab's authored localScale. 1.0 = full prefab size, and the per-stack scale is clamped to this value.")]
-        [Range(0f, 1f)] [SerializeField] private float frozenScale = 1.0f;
+        [Tooltip("Colour the overlay swaps to once the ball is fully frozen. Replaces the prefab's authored colour for the duration of the frozen state.")]
+        [SerializeField] private Color frozenColor = new Color(0.5f, 0.85f, 1f, 1f);
 
         // Cached renderers + instanced materials on the frozen overlay so we can drive
         // their alpha at runtime without mutating the shared material asset.
         private Renderer[] frostOverlayRenderers;
         private Material[] frostOverlayMaterials;
         private float[] frostOverlayBaseAlphas;
-        private Vector3 frostOverlayBaseScale = Vector3.one;
+        private Color[] frostOverlayBaseColors;
 
         // Runtime properties
         private float pathProgress;
@@ -96,15 +94,16 @@ namespace YuumisProwl.BallChain
         private void CacheFrostOverlayMaterials()
         {
             if (frozenOverlay == null) return;
-            frostOverlayBaseScale = frozenOverlay.transform.localScale;
             frostOverlayRenderers = frozenOverlay.GetComponentsInChildren<Renderer>(includeInactive: true);
             frostOverlayMaterials = new Material[frostOverlayRenderers.Length];
             frostOverlayBaseAlphas = new float[frostOverlayRenderers.Length];
+            frostOverlayBaseColors = new Color[frostOverlayRenderers.Length];
             for (int i = 0; i < frostOverlayRenderers.Length; i++)
             {
                 var src = frostOverlayRenderers[i].sharedMaterial;
                 if (src == null) { frostOverlayMaterials[i] = null; continue; }
                 frostOverlayBaseAlphas[i] = src.color.a;
+                frostOverlayBaseColors[i] = src.color;
                 var instance = new Material(src);
                 frostOverlayRenderers[i].material = instance;
                 frostOverlayMaterials[i] = instance;
@@ -134,8 +133,7 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Sets the ball's frost-stack count (Blue ice-patches synergy). Drives the
-        /// overlay's alpha and scale.
+        /// Sets the ball's frost-stack count (Blue ice-patches synergy). Drives the overlay alpha.
         /// </summary>
         public void SetFrostStacks(int stacks)
         {
@@ -144,8 +142,7 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Sets the ball's frozen state. When true the overlay snaps to full opacity
-        /// and frozenScale. Triggers the icicle hook on destruction (via BallNode).
+        /// Sets the ball's frozen state. When true the overlay swaps to frozenColor at full opacity.
         /// </summary>
         public void SetFrozen(bool isFrozen)
         {
@@ -155,12 +152,25 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Drives the frozen overlay child's active state, alpha, and scale.
-        /// Alpha and scale are both fractions of the prefab's authored values.
-        ///   Frozen        → overlay ON,  alpha = prefab,       scale = frozenScale × prefab
-        ///   stacks > 0    → overlay ON,  alpha ∝ stacks,       scale grows with stacks
-        ///   else          → overlay OFF
+        /// Brief alpha-flash on the frost overlay — used by cryo burst to confirm
+        /// "this ball just got hit by the ring." Pulses to full alpha, then restores
+        /// the stack-driven alpha when the routine finishes.
         /// </summary>
+        public void FlashFrost(float duration = 0.15f)
+        {
+            if (frozenOverlay == null) return;
+            StartCoroutine(FlashFrostRoutine(duration));
+        }
+
+        private System.Collections.IEnumerator FlashFrostRoutine(float duration)
+        {
+            if (frozenOverlay == null) yield break;
+            frozenOverlay.SetActive(true);
+            SetFrostOverlayAlpha(1f);
+            yield return new WaitForSeconds(duration);
+            UpdateFrostOverlay();
+        }
+
         private void UpdateFrostOverlay()
         {
             if (frozenOverlay == null) return;
@@ -168,26 +178,18 @@ namespace YuumisProwl.BallChain
             if (frozen)
             {
                 frozenOverlay.SetActive(true);
-                SetFrostOverlayAlpha(1f);
-                ApplyFrostOverlayScale(frozenScale);
+                SetFrostOverlayFrozenColor();
             }
             else if (frostStacks > 0)
             {
                 frozenOverlay.SetActive(true);
                 float alpha = Mathf.Clamp(frostStacks * frostAlphaPerStack, 0f, 0.99f);
                 SetFrostOverlayAlpha(alpha);
-                ApplyFrostOverlayScale(Mathf.Clamp(frostStacks * frostScalePerStack, 0f, frozenScale));
             }
             else
             {
                 frozenOverlay.SetActive(false);
             }
-        }
-
-        private void ApplyFrostOverlayScale(float factor)
-        {
-            if (frozenOverlay == null) return;
-            frozenOverlay.transform.localScale = frostOverlayBaseScale * factor;
         }
 
         private void SetFrostOverlayAlpha(float factor)
@@ -197,11 +199,25 @@ namespace YuumisProwl.BallChain
             {
                 var mat = frostOverlayMaterials[i];
                 if (mat == null) continue;
-                Color c = mat.color;
+                Color c = frostOverlayBaseColors != null && i < frostOverlayBaseColors.Length
+                    ? frostOverlayBaseColors[i]
+                    : mat.color;
                 c.a = frostOverlayBaseAlphas[i] * factor;
                 mat.color = c;
             }
         }
+
+        private void SetFrostOverlayFrozenColor()
+        {
+            if (frostOverlayMaterials == null) return;
+            for (int i = 0; i < frostOverlayMaterials.Length; i++)
+            {
+                var mat = frostOverlayMaterials[i];
+                if (mat == null) continue;
+                mat.color = frozenColor;
+            }
+        }
+
 
         /// <summary>
         /// Updates the ball's visual appearance.

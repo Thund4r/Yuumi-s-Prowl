@@ -5,13 +5,12 @@ namespace YuumisProwl.Managers
 {
     /// <summary>
     /// Handles game state and win/lose conditions.
-    /// Win conditions:
-    ///   1. MatchProcessor.OnChainCleared event fires (fast path for match/bomb/pierce).
-    ///   2. Per-frame robust check: chain is empty after gameplay has started — catches
-    ///      icicles and any other path that removes balls without firing OnChainCleared.
-    ///   3. Per-frame retreat check: balls exist but none visible (chain pulled back into hole).
-    /// Lose condition:
-    ///   Lead ball reaches the end of the path.
+    /// Win conditions (all converge on WinGame, which guards against double-firing):
+    ///   1. MatchProcessor.OnChainCleared event (fast path when matches/bombs empty the chain).
+    ///   2. Per-frame: gameplay has started AND no balls are visible on screen. Catches
+    ///      every other case — chain emptied via icicles, chain cleared down to the
+    ///      invisible queue, chain pushed entirely below the hole by gap-close, etc.
+    /// Lose condition: lead ball reaches the end of the path.
     /// </summary>
     public class GameManager : MonoBehaviour
     {
@@ -59,17 +58,14 @@ namespace YuumisProwl.Managers
             bool introPlaying = ballSpawner != null && ballSpawner.IsPlayingIntro;
             if (introPlaying) return;
 
-            // Robust empty-chain win: any path that empties the chain after gameplay has
-            // started counts as a win, even if OnChainCleared wasn't fired (e.g. icicles,
-            // future synergies, anything that calls RemoveBallAtIndex directly).
-            if (gameplayStarted && ballChainManager.BallCount == 0)
-            {
-                WinGame();
-                return;
-            }
+            if (!gameplayStarted) return;
 
-            // Retreat win: balls exist but none are visible (chain fully pulled back into the hole).
-            if (ballChainManager.BallCount > 0 && !ballChainManager.HasVisibleBalls())
+            // Single converged win condition: no balls on screen. Covers chain-emptied
+            // (BallCount == 0 → HasVisibleBalls trivially false), chain-cleared-to-queue
+            // (queue balls exist below hole, none visible), and chain-retreated (gap-close
+            // pushed everything below hole). The earlier OnChainCleared event handler is
+            // a faster-firing duplicate of the empty-chain case.
+            if (!ballChainManager.HasVisibleBalls())
             {
                 WinGame();
             }

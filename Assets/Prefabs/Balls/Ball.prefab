@@ -125,8 +125,7 @@ MonoBehaviour:
   powerUpIndicator: {fileID: 0}
   frozenOverlay: {fileID: 3237741206063359900}
   frostAlphaPerStack: 0.4
-  frostScalePerStack: 1
-  frozenScale: 1
+  frozenColor: {r: 0.2688679, g: 0.3241552, b: 1, a: 1}
 --- !u!1001 &2319263274916387533
 PrefabInstance:
   m_ObjectHideFlags: 0

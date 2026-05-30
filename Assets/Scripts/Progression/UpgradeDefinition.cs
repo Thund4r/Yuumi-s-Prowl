@@ -47,6 +47,12 @@ namespace YuumisProwl.Progression
         FireRate                     = 21, // raw float — seconds shaved off the projectile spawn cooldown
         RageUnlock                   = 22, // flag — anchor purple upgrade that enables the rage meter
         IcePatches                   = 23, // flag — anchor blue upgrade. Blue matches drop ice patches that frost-stack passing balls; at threshold a ball freezes; destroying a frozen ball spawns an icicle.
+        CryoBurst                    = 24, // flag — blue matches emit an AoE freezing ring that adds +1 frost stack to balls in range. Prereq: IcePatches.
+        CryoBurstChain               = 25, // flag — destroyed frozen balls also emit a cryo burst. Prereq: CryoBurst.
+        FreezeTheHunted              = 26, // flag — icicles prioritise already-frozen balls when one is available. Prereq: IcePatches.
+        FrostThresholdReduction      = 27, // raw int — lowers iceFreezeStackThreshold, floored at 1. Prereq: IcePatches.
+        BlueChainSlowdown            = 28, // flag — every blue synergy upgrade slows the chain briefly after blue matches (count-scaled magnitude). Prereq: IcePatches.
+        BlueSlowdownDuration         = 29, // raw float — extra seconds added to the chain-slowdown window after a blue match. Prereq: BlueChainSlowdown.
     }
 
     [CreateAssetMenu(fileName = "Upgrade_", menuName = "Yuumi/Upgrade Definition")]
@@ -178,6 +184,24 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.IcePatches:
                     stats.IcePatchesEnabled = true;
                     break;
+                case UpgradeStat.CryoBurst:
+                    stats.CryoBurstEnabled = true;
+                    break;
+                case UpgradeStat.CryoBurstChain:
+                    stats.CryoBurstChainEnabled = true;
+                    break;
+                case UpgradeStat.FreezeTheHunted:
+                    stats.FreezeTheHuntedEnabled = true;
+                    break;
+                case UpgradeStat.FrostThresholdReduction:
+                    stats.FrostThresholdReduction += Mathf.RoundToInt(total);
+                    break;
+                case UpgradeStat.BlueChainSlowdown:
+                    stats.BlueChainSlowdownEnabled = true;
+                    break;
+                case UpgradeStat.BlueSlowdownDuration:
+                    stats.BlueSlowdownDurationBonus += total;
+                    break;
             }
         }
 
@@ -237,6 +261,10 @@ namespace YuumisProwl.Progression
                     return $"+{Mathf.RoundToInt(total)} gold / {TargetColor} match";
                 case UpgradeStat.ExplosionThresholdReduction:
                     return $"-{Mathf.RoundToInt(total)} explosion threshold";
+                case UpgradeStat.FrostThresholdReduction:
+                    return $"-{Mathf.RoundToInt(total)} freeze threshold";
+                case UpgradeStat.BlueSlowdownDuration:
+                    return $"+{total:F1}s slow duration";
                 // Raw float stats.
                 case UpgradeStat.YuumiRotationSpeed:
                     return $"+{total:F1}";
@@ -254,6 +282,10 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.RedMatchExplosion:
                 case UpgradeStat.RageUnlock:
                 case UpgradeStat.IcePatches:
+                case UpgradeStat.CryoBurst:
+                case UpgradeStat.CryoBurstChain:
+                case UpgradeStat.FreezeTheHunted:
+                case UpgradeStat.BlueChainSlowdown:
                     return "Enabled";
                 default:
                     return "—";

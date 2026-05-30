@@ -15,7 +15,7 @@ MonoBehaviour:
   <UpgradeId>k__BackingField: BlueIcePatches
   <Stat>k__BackingField: 23
   <UpgradeName>k__BackingField: Glacial Pact
-  <Description>k__BackingField: Blue ball matches leave patcches of ice. Balls passing
+  <Description>k__BackingField: Blue ball matches leave patches of ice. Balls passing
     through them gets a frost stack. Frozen balls shoots homingicicles when destroyed.
   <Icon>k__BackingField: {fileID: 0}
   <ModifierValue>k__BackingField: 0

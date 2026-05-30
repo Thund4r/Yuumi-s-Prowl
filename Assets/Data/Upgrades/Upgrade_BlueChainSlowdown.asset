@@ -10,20 +10,21 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bc62326503a37194aaf767d87ba19bae, type: 3}
-  m_Name: Upgrade_ChargePerBall
+  m_Name: Upgrade_BlueChainSlowdown
   m_EditorClassIdentifier: 
-  <UpgradeId>k__BackingField: ChargePerBall
-  <Stat>k__BackingField: 1
-  <UpgradeName>k__BackingField: Charge Efficiency
-  <Description>k__BackingField: +1 Charge per ball
+  <UpgradeId>k__BackingField: BlueChainSlowdown
+  <Stat>k__BackingField: 28
+  <UpgradeName>k__BackingField: Winter's Grip
+  <Description>k__BackingField: Balls will slow down after a blue match
   <Icon>k__BackingField: {fileID: 0}
-  <ModifierValue>k__BackingField: 1
-  <TargetColor>k__BackingField: 0
-  <IsColorSynergy>k__BackingField: 0
+  <ModifierValue>k__BackingField: 0
+  <TargetColor>k__BackingField: 1
+  <IsColorSynergy>k__BackingField: 1
   <IsDraftable>k__BackingField: 1
   <IsShoppable>k__BackingField: 1
   <IsMetaShop>k__BackingField: 0
   <MaxRank>k__BackingField: 1
   <ShopCost>k__BackingField: 100
   <RankEssenceCosts>k__BackingField: 
-  <Prerequisites>k__BackingField: []
+  <Prerequisites>k__BackingField:
+  - {fileID: 11400000, guid: e2c4d9c9989be4c42b03edef9e600072, type: 2}

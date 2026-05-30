@@ -246,19 +246,6 @@ namespace YuumisProwl.BallChain
                 BallColor matchedColor = matchedBalls[0].ball.BallColor;
                 int destroyedCount = matchedBalls.Count;
 
-                // Detect whether the match touches the lead or tail of the current segment.
-                // If it doesn't (mid-segment), removal will split the chain.
-                ChainSegment matchedSeg = FindSegmentById(currentSegId);
-                bool atLead = false;
-                bool atTail = false;
-                if (matchedSeg != null)
-                {
-                    int firstLocal = matchedSeg.balls.IndexOf(matchedBalls[0]);
-                    int lastLocal = matchedSeg.balls.IndexOf(matchedBalls[matchedBalls.Count - 1]);
-                    atLead = firstLocal == 0;
-                    atTail = lastLocal == matchedSeg.Count - 1;
-                }
-
                 FireMatchVisual(matchedBalls, matchedColor, sequenceState.matchCount);
 
                 int segCountBefore = ballChainManager.GetSegments().Count;
@@ -287,21 +274,8 @@ namespace YuumisProwl.BallChain
                     // detects cascade matches at the contact point automatically.
                     yield return StartCoroutine(WaitForBackMost(currentSegId));
                 }
-                else
-                {
-                    // No split. Cascade only possible if the match was at the segment's lead
-                    // or tail (now exposing a new lead/tail with potentially same-color balls).
-                    ChainSegment afterSeg = FindSegmentById(currentSegId);
-                    if (afterSeg != null && !afterSeg.IsEmpty)
-                    {
-                        int checkLocal = -1;
-                        if (atLead) checkLocal = 0;
-                        else if (atTail) checkLocal = afterSeg.Count - 1;
-
-                        if (checkLocal >= 0 && checkLocal < afterSeg.Count)
-                            matchedBalls = matchDetector.DetectMatchAtIndex(afterSeg.balls, checkLocal);
-                    }
-                }
+                // No-split branch intentionally absent: an edge match doesn't auto-cascade.
+                // Any unmatched 3+ run left behind is for the player to clear themselves.
             }
 
             // Apply the recoil "snap back" once the front segment has merged with the tail

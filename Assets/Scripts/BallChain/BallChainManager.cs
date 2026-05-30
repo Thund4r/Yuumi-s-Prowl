@@ -44,6 +44,8 @@ namespace YuumisProwl.BallChain
 
         [Header("Spawn Hole Settings")]
         [SerializeField] private float holeProgress = 0f;
+        [Tooltip("Path-progress floor where new balls spawn. Set below holeProgress so the chain extends past the hole as an invisible queue — back-end destructions then produce real gaps the multi-segment system closes naturally. ~-0.25 works for most maps; tune by playtest.")]
+        [SerializeField] private float spawnProgress = -0.25f;
 
         // Events
         public System.Action OnBallReachedEnd;
@@ -78,6 +80,17 @@ namespace YuumisProwl.BallChain
 
         public float BallSpeed => ballSpeed;
         public float BallSpacing => ballSpacing;
+        /// <summary>
+        /// Transient speed multiplier applied to both forward motion and gap-close motion.
+        /// 1.0 = normal speed. Used by IceSynergy's Chain Slowdown — when a blue match fires,
+        /// it sets this below 1.0 for a window, then restores to 1.0. Clamped at SetChainSpeedMultiplier.
+        /// </summary>
+        public float ChainSpeedMultiplier { get; private set; } = 1f;
+
+        public void SetChainSpeedMultiplier(float multiplier)
+        {
+            ChainSpeedMultiplier = Mathf.Clamp(multiplier, 0.01f, 10f);
+        }
         public int BallCount
         {
             get
@@ -200,7 +213,7 @@ namespace YuumisProwl.BallChain
                 // next gap starts from the base speed instead of inheriting the prior ramp.
                 currentGapCloseSpeed = gapCloseSpeed;
 
-                float forwardStep = ballSpeed * deltaTime / pathLength;
+                float forwardStep = ballSpeed * ChainSpeedMultiplier * deltaTime / pathLength;
                 lead.pathProgress += forwardStep;
             }
             else
@@ -210,7 +223,7 @@ namespace YuumisProwl.BallChain
                 currentGapCloseSpeed = Mathf.Min(
                     currentGapCloseSpeed + gapCloseAcceleration * deltaTime,
                     gapCloseMaxSpeed);
-                float gapCloseStep = currentGapCloseSpeed * deltaTime / pathLength;
+                float gapCloseStep = currentGapCloseSpeed * ChainSpeedMultiplier * deltaTime / pathLength;
                 lead.pathProgress -= gapCloseStep;
             }
 
@@ -357,7 +370,7 @@ namespace YuumisProwl.BallChain
 
         private float CalculateSpawnProgress(ChainSegment backSegment)
         {
-            if (backSegment.IsEmpty) return 0f;
+            if (backSegment.IsEmpty) return spawnProgress;
 
             float pathLength = pathController.GetPathLength();
             float spacingProgress = ballSpacing / pathLength;
@@ -758,13 +771,17 @@ namespace YuumisProwl.BallChain
         public bool NeedsTailBall()
         {
             ChainSegment back = GetBackSegment();
+            // Empty chain: don't auto-spawn. The intro populates the initial chain via
+            // SpawnAllBalls; if we returned true here, BallSpawner.Update would silently
+            // drop an invisible queue ball during LevelManager's pre-intro pause and the
+            // retreat-win check (BallCount > 0 && !HasVisibleBalls) would fire instantly.
             if (back == null || back.IsEmpty) return false;
 
             float pathLength = pathController.GetPathLength();
             if (pathLength <= 0f) return false;
 
             float spacingProgress = ballSpacing / pathLength;
-            return back.Tail.pathProgress > holeProgress + spacingProgress;
+            return back.Tail.pathProgress > spawnProgress + spacingProgress;
         }
 
         // --------------------------------------------------------------
@@ -922,6 +939,7 @@ namespace YuumisProwl.BallChain
                 }
             }
             segments.Clear();
+            ChainSpeedMultiplier = 1f;
         }
 
         private void OnDestroy()

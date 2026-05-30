@@ -57,6 +57,18 @@ namespace YuumisProwl.Progression
         [Header("Ice Patches (Blue)")]
         [Tooltip("If true, blue matches drop ice patches that frost-stack passing balls, and destroyed frozen balls spawn icicles. Set by the IcePatches anchor upgrade.")]
         public bool IcePatchesEnabled;
+        [Tooltip("If true, blue matches also emit an AoE freezing ring that adds +1 frost stack to balls in range. Prereq: IcePatchesEnabled.")]
+        public bool CryoBurstEnabled;
+        [Tooltip("If true, destroyed frozen balls emit a cryo burst (in addition to spawning an icicle). Prereq: CryoBurstEnabled.")]
+        public bool CryoBurstChainEnabled;
+        [Tooltip("If true, icicles prefer already-frozen balls when one is available; falls back to random untargeted otherwise.")]
+        public bool FreezeTheHuntedEnabled;
+        [Tooltip("Subtracted from RunConfig.iceFreezeStackThreshold (floored at 1). Each rank lowers the stacks-to-freeze count.")]
+        public int FrostThresholdReduction;
+        [Tooltip("If true, every blue synergy upgrade owned (including this one) slows the chain after blue matches. Magnitude scales by ColorSynergyCounts[Blue].")]
+        public bool BlueChainSlowdownEnabled;
+        [Tooltip("Additive seconds added to the chain-slowdown window after a blue match (on top of RunConfig.blueSlowdownBaseDuration).")]
+        public float BlueSlowdownDurationBonus;
 
         [Header("Rage Synergy (Purple)")]
         [Tooltip("If true, the rage meter is unlocked. Set by the RageUnlock 'anchor' purple upgrade.")]
@@ -182,6 +194,12 @@ namespace YuumisProwl.Progression
             ExplosionThresholdReduction = 0;
             BombAwardWeight = 1f;
             IcePatchesEnabled = false;
+            CryoBurstEnabled = false;
+            CryoBurstChainEnabled = false;
+            FreezeTheHuntedEnabled = false;
+            FrostThresholdReduction = 0;
+            BlueChainSlowdownEnabled = false;
+            BlueSlowdownDurationBonus = 0f;
             RageEnabled = false;
             RageBuildupBonus = 0f;
             RageDurationBonus = 0f;

@@ -56,6 +56,15 @@ namespace YuumisProwl.Progression
         // ----- ice patch visual pool -----
         private readonly Queue<GameObject> patchVisualPool = new Queue<GameObject>(16);
 
+        // ----- chain slowdown state (BlueChainSlowdown / BlueSlowdownDuration) -----
+        private float slowdownExpiryTime;
+        private bool slowdownActive;
+
+        // Frame on which any cryo burst was last scheduled (match-triggered or cascade).
+        // Used to dedup subsequent cascade bursts in the same frame, so a single
+        // destruction event that kills multiple frozen balls produces one burst, not N.
+        private int lastBurstFrame = -1;
+
         private void Awake()
         {
             for (int i = 0; i < initialIciclePoolSize; i++)
@@ -84,6 +93,7 @@ namespace YuumisProwl.Progression
             TearDownAllPatches();
             ReleaseAllIcicles();
             targetedBalls.Clear();
+            ClearSlowdown();
         }
 
         private void Update()
@@ -92,10 +102,12 @@ namespace YuumisProwl.Progression
             {
                 // Synergy off — make sure nothing lingers.
                 if (activePatches.Count > 0) TearDownAllPatches();
+                if (slowdownActive) ClearSlowdown();
                 return;
             }
 
             TickPatches();
+            TickSlowdown();
         }
 
         // ============================================================
@@ -117,6 +129,153 @@ namespace YuumisProwl.Progression
             float reentryCooldown = config != null ? config.icePatchReentryCooldown : 2f;
 
             SpawnPatch(centroid, radius, duration, reentryCooldown);
+
+            if (runtimeStats.CryoBurstEnabled)
+            {
+                lastBurstFrame = Time.frameCount;
+                StartCoroutine(CryoBurstNextFrame(centroid));
+            }
+
+            if (runtimeStats.BlueChainSlowdownEnabled)
+                ApplyChainSlowdown();
+        }
+
+        // ============================================================
+        // Chain slowdown (BlueChainSlowdown / BlueSlowdownDuration)
+        // ============================================================
+
+        private void ApplyChainSlowdown()
+        {
+            if (ballChainManager == null || config == null) return;
+
+            int blueCount = runtimeStats != null ? runtimeStats.GetColorSynergyCount(BallColor.Blue) : 0;
+            float reduction = blueCount * config.blueSlowdownPerUpgrade;
+            float multiplier = Mathf.Max(config.blueSlowdownMinMultiplier, 1f - reduction);
+
+            float duration = config.blueSlowdownBaseDuration
+                             + (runtimeStats != null ? runtimeStats.BlueSlowdownDurationBonus : 0f);
+
+            // Refresh the timer rather than stacking durations — multiple blue matches in
+            // quick succession keep the chain slow but don't compound into a longer total.
+            ballChainManager.SetChainSpeedMultiplier(multiplier);
+            slowdownExpiryTime = Time.time + duration;
+            slowdownActive = true;
+        }
+
+        private void TickSlowdown()
+        {
+            if (!slowdownActive) return;
+            if (Time.time < slowdownExpiryTime) return;
+
+            if (ballChainManager != null) ballChainManager.SetChainSpeedMultiplier(1f);
+            slowdownActive = false;
+        }
+
+        private void ClearSlowdown()
+        {
+            if (ballChainManager != null) ballChainManager.SetChainSpeedMultiplier(1f);
+            slowdownActive = false;
+            slowdownExpiryTime = 0f;
+        }
+
+        // ============================================================
+        // Cryo Burst — expanding AoE that stacks frost on contact
+        // ============================================================
+
+        private System.Collections.IEnumerator CryoBurstNextFrame(Vector3 center)
+        {
+            yield return null;
+            yield return StartCoroutine(CryoBurstRoutine(center));
+        }
+
+        private System.Collections.IEnumerator CryoBurstRoutine(Vector3 center)
+        {
+            float maxRadius = config != null ? config.cryoBurstRadius : 2f;
+            float duration  = config != null ? config.cryoBurstDuration : 0.4f;
+
+            GameObject ring = AcquirePatchVisual();
+            if (ring != null)
+            {
+                ring.transform.position = center;
+                ring.transform.localScale = Vector3.zero;
+                ring.SetActive(true);
+            }
+
+            var alreadyStacked = new HashSet<Ball>();
+
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                float currentRadius = Mathf.Lerp(0f, maxRadius, t);
+
+                if (ring != null)
+                {
+                    float diameter = currentRadius * 2f;
+                    ring.transform.localScale = new Vector3(diameter, diameter, 1f);
+                }
+
+                ApplyBurstHits(center, currentRadius, alreadyStacked);
+                yield return null;
+            }
+
+            // Final sweep at max radius to catch anything the lerp skipped on the last frame.
+            ApplyBurstHits(center, maxRadius, alreadyStacked);
+
+            ReleasePatchVisual(ring);
+        }
+
+        private void ApplyBurstHits(Vector3 center, float radius, HashSet<Ball> alreadyStacked)
+        {
+            if (ballChainManager == null || radius <= 0f) return;
+
+            int threshold = GetEffectiveFreezeThreshold();
+            var segments = ballChainManager.GetSegments();
+
+            Collider[] hits = Physics.OverlapSphere(center, radius);
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (!hits[i].CompareTag("Ball")) continue;
+                Ball ball = hits[i].GetComponent<Ball>();
+                if (ball == null || !ball.gameObject.activeInHierarchy) continue;
+                if (alreadyStacked.Contains(ball)) continue;
+
+                BallNode node = FindNodeFor(ball, segments);
+                if (node == null || node.isFrozen) continue;
+
+                node.freezeStacks++;
+                ball.SetFrostStacks(node.freezeStacks);
+                if (node.freezeStacks >= threshold)
+                {
+                    node.isFrozen = true;
+                    node.freezeStacks = 0;
+                    ball.SetFrozen(true);
+                }
+                ball.FlashFrost();
+                alreadyStacked.Add(ball);
+            }
+        }
+
+        private BallNode FindNodeFor(Ball ball, List<ChainSegment> segments)
+        {
+            if (segments == null) return null;
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var seg = segments[s];
+                for (int i = 0; i < seg.balls.Count; i++)
+                {
+                    if (seg.balls[i].ball == ball) return seg.balls[i];
+                }
+            }
+            return null;
+        }
+
+        private int GetEffectiveFreezeThreshold()
+        {
+            int baseThreshold = config != null ? config.iceFreezeStackThreshold : 3;
+            int reduction = runtimeStats != null ? runtimeStats.FrostThresholdReduction : 0;
+            return Mathf.Max(1, baseThreshold - reduction);
         }
 
         private void SpawnPatch(Vector3 center, float radius, float duration, float reentryCooldown)
@@ -124,9 +283,9 @@ namespace YuumisProwl.Progression
             GameObject visual = AcquirePatchVisual();
             if (visual != null)
             {
-                visual.transform.position = new Vector3(center.x, center.y, center.z + 0.01f);
+                visual.transform.position = new Vector3(center.x, center.y, center.z);
                 // Diameter scaling — visual is assumed to be a unit sprite/quad.
-                visual.transform.localScale = new Vector3(radius * 2f, radius * 2f, 1f);
+                visual.transform.localScale = new Vector3(radius, radius, 1f);
                 visual.SetActive(true);
             }
 
@@ -149,7 +308,7 @@ namespace YuumisProwl.Progression
         {
             if (ballChainManager == null) return;
 
-            int threshold = config != null ? config.iceFreezeStackThreshold : 3;
+            int threshold = GetEffectiveFreezeThreshold();
             float now = Time.time;
 
             // Iterate patches reverse so we can remove expired ones inline.
@@ -247,6 +406,18 @@ namespace YuumisProwl.Progression
             if (runtimeStats == null || !runtimeStats.IcePatchesEnabled) return;
             if (ballChainManager == null) return;
 
+            // Shatter Cascade extends CryoBurst — destroyed frozen balls also emit a burst.
+            // Capped at one burst per frame so a single destruction event (a match, a bomb,
+            // a pierce, a red explosion, etc.) that kills multiple frozen balls fires one
+            // burst total, not one per ball. Chain reactions across frames still propagate.
+            if (runtimeStats.CryoBurstChainEnabled
+                && runtimeStats.CryoBurstEnabled
+                && Time.frameCount != lastBurstFrame)
+            {
+                lastBurstFrame = Time.frameCount;
+                StartCoroutine(CryoBurstNextFrame(worldPos));
+            }
+
             Ball target = PickRandomUntargetedBall();
             if (target == null) return; // no eligible target — drop the icicle silently
 
@@ -276,9 +447,10 @@ namespace YuumisProwl.Progression
             var allSegments = ballChainManager.GetSegments();
             if (allSegments == null) return null;
 
-            // Collect eligible balls — anything with an active Ball component that isn't
-            // already an icicle target.
+            bool huntFrozen = runtimeStats != null && runtimeStats.FreezeTheHuntedEnabled;
+            List<Ball> frozenEligible = huntFrozen ? new List<Ball>(8) : null;
             List<Ball> eligible = new List<Ball>(32);
+
             for (int s = 0; s < allSegments.Count; s++)
             {
                 var seg = allSegments[s];
@@ -289,8 +461,13 @@ namespace YuumisProwl.Progression
                     if (!node.ball.gameObject.activeInHierarchy) continue;
                     if (targetedBalls.Contains(node.ball)) continue;
                     eligible.Add(node.ball);
+                    if (huntFrozen && node.isFrozen) frozenEligible.Add(node.ball);
                 }
             }
+
+            // Freeze the Hunted: if any untargeted frozen balls exist, pick from those.
+            if (frozenEligible != null && frozenEligible.Count > 0)
+                return frozenEligible[Random.Range(0, frozenEligible.Count)];
 
             if (eligible.Count == 0) return null;
             return eligible[Random.Range(0, eligible.Count)];

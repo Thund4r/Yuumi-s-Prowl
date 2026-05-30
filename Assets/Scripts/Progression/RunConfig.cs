@@ -74,6 +74,21 @@ namespace YuumisProwl.Progression
         [Tooltip("Distance at which an icicle is considered to have arrived at its target ball (world units).")]
         [Min(0.05f)] public float icicleArrivalDistance = 0.4f;
 
+        [Tooltip("World-space max radius of a cryo burst — the AoE ring that grows out from a blue match centroid.")]
+        [Min(0.1f)] public float cryoBurstRadius = 2f;
+
+        [Tooltip("How long the cryo burst ring takes to grow from 0 to cryoBurstRadius (seconds). Stacks are applied as the ring sweeps past each ball.")]
+        [Min(0.05f)] public float cryoBurstDuration = 0.4f;
+
+        [Tooltip("Base seconds the chain slowdown lasts after a blue match (BlueChainSlowdown). Stacks with BlueSlowdownDurationBonus from upgrades.")]
+        [Min(0.1f)] public float blueSlowdownBaseDuration = 1f;
+
+        [Tooltip("Speed multiplier subtracted per blue synergy upgrade owned during the chain slowdown. e.g. 0.1 means with 3 blue upgrades, chain runs at 1.0 - 3*0.1 = 0.7x normal speed.")]
+        [Range(0f, 0.5f)] public float blueSlowdownPerUpgrade = 0.1f;
+
+        [Tooltip("Minimum chain speed multiplier during slowdown — even with many blue upgrades, the chain can't go slower than this. Prevents totally freezing the chain.")]
+        [Range(0.05f, 1f)] public float blueSlowdownMinMultiplier = 0.3f;
+
         [Header("Rage Synergy (Purple)")]
         [Tooltip("Purple synergy upgrades needed for rage to grant loose homing + multi-fire (instead of strict). Count includes the RageUnlock anchor itself.")]
         [Min(1)] public int rageLoosePurpleCount = 3;
