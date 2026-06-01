@@ -401,7 +401,7 @@ namespace YuumisProwl.Progression
         // Frozen ball destroyed → spawn icicle
         // ============================================================
 
-        private void HandleFrozenBallDestroyed(Vector3 worldPos)
+        private void HandleFrozenBallDestroyed(Vector3 worldPos, int power)
         {
             if (runtimeStats == null || !runtimeStats.IcePatchesEnabled) return;
             if (ballChainManager == null) return;
@@ -418,18 +418,23 @@ namespace YuumisProwl.Progression
                 StartCoroutine(CryoBurstNextFrame(worldPos));
             }
 
-            Ball target = PickRandomUntargetedBall();
-            if (target == null) return; // no eligible target — drop the icicle silently
-
-            Icicle icicle = AcquireIcicle();
-            if (icicle == null) return;
-
+            // Frost overcharge: a higher-power frozen ball spawns more icicles (one per power).
+            int icicles = Mathf.Max(1, power);
             float speed = config != null ? config.icicleSpeed : 8f;
             float arrival = config != null ? config.icicleArrivalDistance : 0.4f;
 
-            targetedBalls.Add(target);
-            activeIcicles.Add(icicle);
-            icicle.Launch(worldPos, target, speed, arrival, ballChainManager, matchProcessor, this);
+            for (int n = 0; n < icicles; n++)
+            {
+                Ball target = PickRandomUntargetedBall();
+                if (target == null) break;   // no more eligible targets
+
+                Icicle icicle = AcquireIcicle();
+                if (icicle == null) break;
+
+                targetedBalls.Add(target);
+                activeIcicles.Add(icicle);
+                icicle.Launch(worldPos, target, speed, arrival, ballChainManager, matchProcessor, this);
+            }
         }
 
         /// <summary>Called by Icicle when it resolves (hit, target lost, etc.).</summary>

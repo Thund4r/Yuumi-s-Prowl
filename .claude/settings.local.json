@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "PowerShell(Remove-Item -Force \"Assets/Scripts/Progression/Editor/UpgradeDefinitionEditor.cs\", \"Assets/Scripts/Progression/Editor/UpgradeDefinitionEditor.cs.meta\" -ErrorAction SilentlyContinue; if \\(\\(Test-Path \"Assets/Scripts/Progression/Editor\"\\) -and \\(\\(Get-ChildItem \"Assets/Scripts/Progression/Editor\" -Force | Measure-Object\\).Count -eq 0\\)\\) { Remove-Item -Force \"Assets/Scripts/Progression/Editor\" })",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(git --no-pager diff HEAD -- \"*.cs\")"
     ]
   }
 }

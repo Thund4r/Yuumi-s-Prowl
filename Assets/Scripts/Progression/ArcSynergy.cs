@@ -38,6 +38,8 @@ namespace YuumisProwl.Progression
         [Header("Arc Behaviour")]
         [Tooltip("When hopping, the arc jumps to a RANDOM ball within this many chain positions in front of OR behind the ball it is currently at.")]
         [SerializeField, Min(1)] private int arcHopChainRange = 3;
+        [Tooltip("The arc won't bounce back onto the last N balls it hit (prevents tight ping-pong), but CAN revisit them once they drop out of this window — so a high bounce count keeps arcing instead of running out of targets. Set 2-3.")]
+        [SerializeField, Min(0)] private int arcNoRevisitWindow = 2;
         [Tooltip("Seconds the bolt takes to travel each hop before that ball's charge is applied.")]
         [SerializeField, Min(0f)] private float arcTravelDuration = 0.06f;
         [Tooltip("Seconds of pause between one hop landing and the next hop launching.")]
@@ -66,7 +68,7 @@ namespace YuumisProwl.Progression
         private void Awake()
         {
             float mergeRadius = config != null ? config.igniteMiniRadius : 1f;
-            igniteCoalescer = new FrameCoalescer(this, mergeRadius, (center, count) => ExplodeMini(center));
+            igniteCoalescer = new FrameCoalescer(this, mergeRadius, (center, count, ignitePower) => ExplodeMini(center, ignitePower));
         }
 
         private void OnEnable()
@@ -132,7 +134,8 @@ namespace YuumisProwl.Progression
             if (runtimeStats.SuperchargeEnabled && superN > 0 && arcsFired % superN == 0)
                 units *= 2;
 
-            var visited = new HashSet<Ball>();
+            var recent = new List<Ball>();        // sliding window of the last few hit balls — off-limits
+                                                  // for the next few hops, then revisitable.
             var borrowed = new List<LineRenderer>(bounces);
 
             Vector3 current = start;
@@ -141,12 +144,16 @@ namespace YuumisProwl.Progression
             for (int b = 0; b < bounces; b++)
             {
                 BallNode node = (currentBall == null)
-                    ? FindNearestHop(current, firstHopRange, visited)
-                    : PickHopWithinChainRange(currentBall, arcHopChainRange, visited);
-                if (node == null) break;             // nothing reachable — arc fizzles
+                    ? FindNearestHop(current, firstHopRange, recent)
+                    : PickHopWithinChainRange(currentBall, arcHopChainRange, recent);
+                if (node == null) break;             // nothing reachable right now — arc fizzles
 
                 Vector3 target = node.ball.transform.position;
-                visited.Add(node.ball);
+
+                // Slide the no-revisit window: this ball is blocked for the next arcNoRevisitWindow
+                // hops, then drops out and can be hit again (so a high bounce count keeps arcing).
+                recent.Add(node.ball);
+                while (recent.Count > arcNoRevisitWindow) recent.RemoveAt(0);
 
                 // Travel the bolt to the ball; its charge applies only once the bolt arrives.
                 LineRenderer lr = AcquireLine();
@@ -157,7 +164,13 @@ namespace YuumisProwl.Progression
                 ChargeBall(node, units);          // may pop the ball (static)
 
                 current = target;                 // captured before the charge (a popped ball pools to origin)
-                currentBall = node.ball;          // if it popped, the next PickHop won't find it → arc ends
+                currentBall = node.ball;
+
+                // A static pop (or slipping below the hole) deactivates the ball and drops it from
+                // the chain. Fall back to a position-based hop from `current` next iteration so the
+                // arc keeps going instead of dead-ending at PickHop's "current ball gone" check.
+                if (!currentBall.gameObject.activeInHierarchy)
+                    currentBall = null;
 
                 if (arcHopDelay > 0f) yield return new WaitForSeconds(arcHopDelay);
             }
@@ -167,8 +180,8 @@ namespace YuumisProwl.Progression
             for (int i = 0; i < borrowed.Count; i++) ReleaseLine(borrowed[i]);
         }
 
-        /// <summary>Nearest active, non-power-up, not-yet-visited ball within range of `from` (first hop).</summary>
-        private BallNode FindNearestHop(Vector3 from, float range, HashSet<Ball> visited)
+        /// <summary>Nearest active, non-power-up, not-recently-hit ball within range of `from` (first hop).</summary>
+        private BallNode FindNearestHop(Vector3 from, float range, List<Ball> recent)
         {
             var segments = ballChainManager.GetSegments();
             if (segments == null) return null;
@@ -186,7 +199,7 @@ namespace YuumisProwl.Progression
                     if (node?.ball == null) continue;
                     if (!node.ball.gameObject.activeInHierarchy) continue;
                     if (node.ball.PowerUpType != BallPowerUpType.None) continue;
-                    if (visited.Contains(node.ball)) continue;
+                    if (recent.Contains(node.ball)) continue;
 
                     float d = (node.ball.transform.position - from).sqrMagnitude;
                     if (d <= r2 && d < bestDist)
@@ -200,11 +213,11 @@ namespace YuumisProwl.Progression
         }
 
         /// <summary>
-        /// Picks a random active, non-power-up, not-yet-visited ball within chainRange chain
+        /// Picks a random active, non-power-up, not-recently-hit ball within chainRange chain
         /// positions (front or back) of fromBall. Returns null if fromBall is gone or no
         /// candidate qualifies.
         /// </summary>
-        private BallNode PickHopWithinChainRange(Ball fromBall, int chainRange, HashSet<Ball> visited)
+        private BallNode PickHopWithinChainRange(Ball fromBall, int chainRange, List<Ball> recent)
         {
             var flat = ballChainManager.GetBallChain();   // front-to-back
             if (flat == null || flat.Count == 0) return null;
@@ -225,7 +238,7 @@ namespace YuumisProwl.Progression
                 if (node?.ball == null) continue;
                 if (!node.ball.gameObject.activeInHierarchy) continue;
                 if (node.ball.PowerUpType != BallPowerUpType.None) continue;
-                if (visited.Contains(node.ball)) continue;
+                if (recent.Contains(node.ball)) continue;
                 candidateBuffer.Add(node);
             }
 
@@ -257,8 +270,10 @@ namespace YuumisProwl.Progression
             int bonus = (runtimeStats.OverloadEnabled && node.freezeStacks > 0) ? 1 : 0;
             node.freezeStacks += units + bonus;
             node.ball.SetFrostStacks(node.freezeStacks);
-            if (node.freezeStacks >= EffectiveFreezeThreshold())
+            int threshold = EffectiveFreezeThreshold();
+            if (node.freezeStacks >= threshold)
             {
+                node.frozenPower = node.freezeStacks / threshold;
                 node.isFrozen = true;
                 node.freezeStacks = 0;
                 node.ball.SetFrozen(true);
@@ -276,7 +291,8 @@ namespace YuumisProwl.Progression
             if (node.igniteStacks >= threshold)
             {
                 node.primed = true;
-                node.ball.SetPrimed(true);
+                node.ignitePower = node.igniteStacks / threshold;
+                node.ball.SetPrimed(true, node.ignitePower);
             }
         }
 
@@ -306,19 +322,19 @@ namespace YuumisProwl.Progression
         // Ignite mini-explosion (primed red destroyed)
         // ============================================================
 
-        private void HandleIgnitedBallDestroyed(Vector3 worldPos)
+        private void HandleIgnitedBallDestroyed(Vector3 worldPos, int ignitePower)
         {
             if (runtimeStats == null || !runtimeStats.ConductorEnabled) return;
-            igniteCoalescer.Add(worldPos);
+            igniteCoalescer.Add(worldPos, ignitePower);
         }
 
         /// <summary>Small AoE removal at a primed-red death site. Mirrors ExplosionSynergy.</summary>
-        private void ExplodeMini(Vector3 center)
+        private void ExplodeMini(Vector3 center, int ignitePower)
         {
             if (ballChainManager == null) return;
             float radius = config != null ? config.igniteMiniRadius : 1f;
 
-            Collider[] hits = Physics.OverlapSphere(center, radius);
+            Collider[] hits = Physics.OverlapSphere(center, radius * Mathf.Max(1, ignitePower));
             var indices = new List<int>();
             for (int i = 0; i < hits.Length; i++)
             {

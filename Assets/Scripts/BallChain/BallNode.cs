@@ -48,6 +48,8 @@ namespace YuumisProwl.BallChain
         /// no active synergy. At RunConfig.staticThreshold the ball pops (weak single removal).
         /// </summary>
         public int staticStacks;
+        public int ignitePower;
+        public int frozenPower;
 
         public BallNode(Ball ball, float pathProgress, int chainIndex)
         {
@@ -62,6 +64,8 @@ namespace YuumisProwl.BallChain
             this.igniteStacks = 0;
             this.primed = false;
             this.staticStacks = 0;
+            this.ignitePower = 0;
+            this.frozenPower = 0;
         }
     }
 }

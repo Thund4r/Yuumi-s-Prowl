@@ -35,6 +35,16 @@ namespace YuumisProwl.BallChain
         [SerializeField] private Color primedTint = new Color(1f, 0.55f, 0.05f, 1f);
         [Tooltip("Per-stack fraction of the lerp toward primedTint before the ball is primed.")]
         [Range(0f, 1f)] [SerializeField] private float igniteTintPerStack = 0.25f;
+        [Tooltip("Child GameObject (a flame/ember icon) overlaid on a charging red ball. Its alpha fades in as ignite stacks build, then it blinks once primed and scales up with ignite power. Renderer/sprite must be transparency-capable. Optional — null disables it.")]
+        [SerializeField] private GameObject igniteSymbol;
+        [Tooltip("Alpha the symbol gains per ignite stack while charging (before primed). Tune ~1/igniteThreshold so it's near full at the prime point.")]
+        [Range(0f, 1f)] [SerializeField] private float igniteSymbolAlphaPerStack = 0.34f;
+        [Tooltip("Blink cycles per second once the ball is primed.")]
+        [Min(0.1f)] [SerializeField] private float ignitePulseSpeed = 3f;
+        [Tooltip("Extra symbol scale per ignite power beyond 1, so a higher-power primed ball reads bigger. Clamped by Ignite Symbol Max Scale.")]
+        [Min(0f)] [SerializeField] private float igniteSymbolScalePerPower = 0.3f;
+        [Tooltip("Maximum symbol scale multiplier, so extreme ignite power can't make it absurdly large.")]
+        [Min(1f)] [SerializeField] private float igniteSymbolMaxScale = 3f;
 
         // Cached renderers + instanced materials on the frozen overlay so we can drive
         // their alpha at runtime without mutating the shared material asset.
@@ -42,6 +52,14 @@ namespace YuumisProwl.BallChain
         private Material[] frostOverlayMaterials;
         private float[] frostOverlayBaseAlphas;
         private Color[] frostOverlayBaseColors;
+
+        // Ignite symbol caches — per-renderer base colour + (for non-sprite renderers) an instanced
+        // material, so we can drive alpha for both SpriteRenderers and mesh/quad renderers.
+        private Renderer[] igniteSymbolRenderers;
+        private Material[] igniteSymbolMaterials;
+        private Color[] igniteSymbolBaseColors;
+        private Vector3 igniteSymbolBaseScale = Vector3.one;
+        private Coroutine ignitePulseRoutine;
 
         // Runtime properties
         private float pathProgress;
@@ -53,6 +71,7 @@ namespace YuumisProwl.BallChain
         private bool frozen = false;
         private int igniteStacks = 0;
         private bool primed = false;
+        private int ignitePower = 1;
 
         public BallColor BallColor => ballColor;
         public BallPowerUpType PowerUpType => powerUpType;
@@ -91,7 +110,17 @@ namespace YuumisProwl.BallChain
             }
 
             CacheFrostOverlayMaterials();
+            CacheIgniteSymbol();
             UpdateFrostOverlay();
+        }
+
+        private void OnEnable()
+        {
+            // A queue ball can be deactivated (below the hole) and reactivated while staying in
+            // the chain; Unity stops coroutines on deactivate, so re-apply the ignite symbol state
+            // here — restart the blink if primed, otherwise the fade-in if it was charging.
+            if (primed) UpdateIgnitePrimedSymbol();
+            else if (igniteStacks > 0) UpdateIgniteSymbolCharging();
         }
 
         /// <summary>
@@ -116,6 +145,38 @@ namespace YuumisProwl.BallChain
                 frostOverlayRenderers[i].material = instance;
                 frostOverlayMaterials[i] = instance;
             }
+        }
+
+        /// <summary>
+        /// Captures the ignite symbol's renderers and (for non-sprite renderers) instances their
+        /// materials, so its alpha can be driven without mutating shared assets. Records the base
+        /// local scale so the primed power-scaling can multiply from it.
+        /// </summary>
+        private void CacheIgniteSymbol()
+        {
+            if (igniteSymbol == null) return;
+            igniteSymbolBaseScale = igniteSymbol.transform.localScale;
+            igniteSymbolRenderers = igniteSymbol.GetComponentsInChildren<Renderer>(includeInactive: true);
+            igniteSymbolMaterials = new Material[igniteSymbolRenderers.Length];
+            igniteSymbolBaseColors = new Color[igniteSymbolRenderers.Length];
+            for (int i = 0; i < igniteSymbolRenderers.Length; i++)
+            {
+                if (igniteSymbolRenderers[i] is SpriteRenderer sr)
+                {
+                    igniteSymbolBaseColors[i] = sr.color;   // sprites tint via SpriteRenderer.color
+                    igniteSymbolMaterials[i] = null;
+                }
+                else
+                {
+                    var src = igniteSymbolRenderers[i].sharedMaterial;
+                    if (src == null) { igniteSymbolMaterials[i] = null; continue; }
+                    igniteSymbolBaseColors[i] = src.color;
+                    var instance = new Material(src);
+                    igniteSymbolRenderers[i].material = instance;
+                    igniteSymbolMaterials[i] = instance;
+                }
+            }
+            igniteSymbol.SetActive(false);
         }
 
         /// <summary>
@@ -159,18 +220,24 @@ namespace YuumisProwl.BallChain
             UpdateFrostOverlay();
         }
 
-        /// <summary>Sets the ball's ignite-stack count (Orange Conductor). Drives the ember tint.</summary>
+        /// <summary>Sets the ball's ignite-stack count (Orange Conductor). Drives the ember tint + the fade-in symbol.</summary>
         public void SetIgniteStacks(int stacks)
         {
             igniteStacks = Mathf.Max(0, stacks);
             UpdateVisuals();
+            if (!primed) UpdateIgniteSymbolCharging();
         }
 
-        /// <summary>Marks the ball primed (ignite threshold reached) — snaps to the full ember tint.</summary>
-        public void SetPrimed(bool isPrimed)
+        /// <summary>
+        /// Marks the ball primed (ignite threshold reached): snaps to the full ember tint, and the
+        /// ignite symbol starts blinking, scaled up by ignite power so a higher-power ball reads bigger.
+        /// </summary>
+        public void SetPrimed(bool isPrimed, int power = 1)
         {
             primed = isPrimed;
+            ignitePower = Mathf.Max(1, power);
             UpdateVisuals();
+            UpdateIgnitePrimedSymbol();
         }
 
         /// <summary>
@@ -308,6 +375,72 @@ namespace YuumisProwl.BallChain
             return baseColor;
         }
 
+        // ============================================================
+        // Ignite symbol — fade-in while charging, blink + power-scale when primed
+        // ============================================================
+
+        /// <summary>Charging (not yet primed): the symbol's alpha tracks the ignite stacks.</summary>
+        private void UpdateIgniteSymbolCharging()
+        {
+            if (igniteSymbol == null) return;
+            if (igniteStacks > 0)
+            {
+                igniteSymbol.SetActive(true);
+                SetIgniteSymbolAlpha(igniteStacks * igniteSymbolAlphaPerStack);
+            }
+            else
+            {
+                igniteSymbol.SetActive(false);
+            }
+        }
+
+        /// <summary>Primed: scale the symbol by ignite power and start (or stop) the blink.</summary>
+        private void UpdateIgnitePrimedSymbol()
+        {
+            if (igniteSymbol == null) return;
+
+            if (ignitePulseRoutine != null) { StopCoroutine(ignitePulseRoutine); ignitePulseRoutine = null; }
+
+            if (primed)
+            {
+                float mult = Mathf.Min(igniteSymbolMaxScale, 1f + (ignitePower - 1) * igniteSymbolScalePerPower);
+                igniteSymbol.transform.localScale = igniteSymbolBaseScale * mult;
+                igniteSymbol.SetActive(true);
+                if (gameObject.activeInHierarchy)
+                    ignitePulseRoutine = StartCoroutine(IgnitePulseRoutine());
+            }
+            else
+            {
+                igniteSymbol.transform.localScale = igniteSymbolBaseScale;
+                UpdateIgniteSymbolCharging();   // revert to the fade-in (or hidden)
+            }
+        }
+
+        private System.Collections.IEnumerator IgnitePulseRoutine()
+        {
+            while (primed)
+            {
+                float a = Mathf.Sin(Time.time * ignitePulseSpeed * Mathf.PI * 2f) * 0.5f + 0.5f;
+                SetIgniteSymbolAlpha(a);
+                yield return null;
+            }
+        }
+
+        private void SetIgniteSymbolAlpha(float factor)
+        {
+            if (igniteSymbolRenderers == null) return;
+            factor = Mathf.Clamp01(factor);
+            for (int i = 0; i < igniteSymbolRenderers.Length; i++)
+            {
+                Color c = igniteSymbolBaseColors[i];
+                c.a = igniteSymbolBaseColors[i].a * factor;
+                if (igniteSymbolRenderers[i] is SpriteRenderer sr)
+                    sr.color = c;
+                else if (igniteSymbolMaterials[i] != null)
+                    igniteSymbolMaterials[i].color = c;
+            }
+        }
+
         /// <summary>
         /// Resets the ball for object pooling.
         /// </summary>
@@ -321,10 +454,17 @@ namespace YuumisProwl.BallChain
             frozen = false;
             igniteStacks = 0;
             primed = false;
+            ignitePower = 1;
+            if (ignitePulseRoutine != null) { StopCoroutine(ignitePulseRoutine); ignitePulseRoutine = null; }
             if (powerUpIndicator != null)
                 powerUpIndicator.SetActive(false);
             if (frozenOverlay != null)
                 frozenOverlay.SetActive(false);
+            if (igniteSymbol != null)
+            {
+                igniteSymbol.transform.localScale = igniteSymbolBaseScale;
+                igniteSymbol.SetActive(false);
+            }
             transform.position = Vector3.zero;
             transform.rotation = Quaternion.identity;
         }
@@ -370,6 +510,15 @@ namespace YuumisProwl.BallChain
                 {
                     if (frostOverlayMaterials[i] != null)
                         Destroy(frostOverlayMaterials[i]);
+                }
+            }
+
+            if (igniteSymbolMaterials != null)
+            {
+                for (int i = 0; i < igniteSymbolMaterials.Length; i++)
+                {
+                    if (igniteSymbolMaterials[i] != null)
+                        Destroy(igniteSymbolMaterials[i]);
                 }
             }
         }

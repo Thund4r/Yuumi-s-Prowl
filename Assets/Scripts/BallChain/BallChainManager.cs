@@ -71,13 +71,13 @@ namespace YuumisProwl.BallChain
         /// the ball's world position at removal time. IceSynergy listens and spawns an
         /// icicle from this position, enabling chain reactions through frozen balls.
         /// </summary>
-        public System.Action<Vector3> OnFrozenBallDestroyed;
+        public System.Action<Vector3, int> OnFrozenBallDestroyed;
         /// <summary>
         /// Fired whenever a *primed* ball (Orange Conductor ignite) is removed from the chain
         /// by any means. Param is the ball's world position at removal time. ArcSynergy listens
         /// and detonates a mini-explosion there.
         /// </summary>
-        public System.Action<Vector3> OnIgnitedBallDestroyed;
+        public System.Action<Vector3, int> OnIgnitedBallDestroyed;
 
         private List<ChainSegment> segments = new List<ChainSegment>();
         private ObjectPool<Ball> ballPool;
@@ -531,6 +531,7 @@ namespace YuumisProwl.BallChain
             bool hammerRemoved = false;
             int hammerIndex = -1;
             float hammerRecoil = 0f;
+            
             foreach (var node in nodesToRemove)
             {
                 if (node.ball != null && node.ball.PowerUpType == BallPowerUpType.Hammer)
@@ -545,24 +546,36 @@ namespace YuumisProwl.BallChain
             // Capture frozen-ball positions before pooling so IceSynergy can spawn
             // icicles from where each frozen ball was. Chain reactions ride this hook.
             List<Vector3> frozenPositions = null;
+            List<int> frozenPowers = null;
             foreach (var node in nodesToRemove)
             {
                 if (node.isFrozen && node.ball != null)
                 {
-                    if (frozenPositions == null) frozenPositions = new List<Vector3>(nodesToRemove.Count);
+                    if (frozenPositions == null)
+                    {
+                        frozenPositions = new List<Vector3>(nodesToRemove.Count);
+                        frozenPowers = new List<int>(nodesToRemove.Count);
+                    }
                     frozenPositions.Add(node.ball.transform.position);
+                    frozenPowers.Add(Mathf.Max(1, node.frozenPower));
                 }
             }
 
             // Capture primed-ball positions before pooling so ArcSynergy can detonate a
             // mini-explosion from where each primed ball was (Orange Conductor ignite).
             List<Vector3> primedPositions = null;
+            List<int> primedPowers = null;
             foreach (var node in nodesToRemove)
             {
                 if (node.primed && node.ball != null)
                 {
-                    if (primedPositions == null) primedPositions = new List<Vector3>(nodesToRemove.Count);
+                    if (primedPositions == null)
+                    {
+                        primedPositions = new List<Vector3>(nodesToRemove.Count);
+                        primedPowers = new List<int>(nodesToRemove.Count);
+                    }
                     primedPositions.Add(node.ball.transform.position);
+                    primedPowers.Add(Mathf.Max(1, node.ignitePower));
                 }
             }
 
@@ -604,13 +617,13 @@ namespace YuumisProwl.BallChain
             if (frozenPositions != null)
             {
                 for (int i = 0; i < frozenPositions.Count; i++)
-                    OnFrozenBallDestroyed?.Invoke(frozenPositions[i]);
+                    OnFrozenBallDestroyed?.Invoke(frozenPositions[i], frozenPowers[i]);
             }
 
             if (primedPositions != null)
             {
                 for (int i = 0; i < primedPositions.Count; i++)
-                    OnIgnitedBallDestroyed?.Invoke(primedPositions[i]);
+                    OnIgnitedBallDestroyed?.Invoke(primedPositions[i], primedPowers[i]);
             }
         }
 
@@ -632,10 +645,12 @@ namespace YuumisProwl.BallChain
             // Capture frozen position before pool return so IceSynergy can spawn an icicle.
             bool wasFrozen = node.isFrozen && node.ball != null;
             Vector3 frozenPos = wasFrozen ? node.ball.transform.position : Vector3.zero;
+            int frozenPower = wasFrozen ? Mathf.Max(1, node.frozenPower) : 0;
 
             // Capture primed position before pool return so ArcSynergy can detonate it.
             bool wasPrimed = node.primed && node.ball != null;
             Vector3 primedPos = wasPrimed ? node.ball.transform.position : Vector3.zero;
+            int primedPower = wasPrimed ? Mathf.Max(1, node.ignitePower) : 0;
 
             if (node.ball != null)
             {
@@ -652,10 +667,10 @@ namespace YuumisProwl.BallChain
                 OnHammerDestroyed?.Invoke(globalChainIndex, hammerRecoil);
 
             if (wasFrozen)
-                OnFrozenBallDestroyed?.Invoke(frozenPos);
+                OnFrozenBallDestroyed?.Invoke(frozenPos, frozenPower);
 
             if (wasPrimed)
-                OnIgnitedBallDestroyed?.Invoke(primedPos);
+                OnIgnitedBallDestroyed?.Invoke(primedPos, primedPower);
         }
 
         /// <summary>

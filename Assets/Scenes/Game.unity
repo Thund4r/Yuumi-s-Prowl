@@ -10063,12 +10063,13 @@ MonoBehaviour:
   runtimeStats: {fileID: 1295330462}
   config: {fileID: 11400000, guid: bc61c204cd8c7214489173924d89f312, type: 2}
   rageMeter: {fileID: 2084717182}
-  arcHopChainRange: 3
+  arcHopChainRange: 5
+  arcNoRevisitWindow: 2
   arcTravelDuration: 0.06
   arcHopDelay: 0.08
   arcColor: {r: 1, g: 0.82440734, b: 0.28773582, a: 1}
   arcWidth: 0.1
-  arcFlashDuration: 3
+  arcFlashDuration: 1
   arcBowFactor: 3
   arcEndInset: 0.35
   arcCurveResolution: 15
