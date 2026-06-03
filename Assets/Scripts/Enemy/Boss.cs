@@ -15,18 +15,20 @@ namespace YuumisProwl.Enemy
             Health = Mathf.RoundToInt(bossData.maxHealth * HealthMultiplier);
         }
 
-        public void TakeDamage(int damage)
+        public bool TakeDamage(int damage)
         {
             Health = Mathf.Max(0, Health - damage);
             if (Health <= 0)
             {
                 OnDefeated?.Invoke();
+                return true;
             }
+            return false;
         }
 
-        public void TakeWaveDamage()
+        public bool TakeWaveDamage()
         {
-            TakeDamage(bossData.waveDamage);
+            return TakeDamage(bossData.waveDamage);
         }
 
         public void SetHealthMultiplier(float multiplier)

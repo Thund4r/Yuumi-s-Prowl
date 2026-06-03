@@ -39,9 +39,9 @@ namespace YuumisProwl.Managers
             currentBoss.TakeDamage(count);
         }
 
-        public void HandleWaveCleared()
+        public bool HandleWaveCleared()
         {
-            currentBoss.TakeWaveDamage();
+            return currentBoss.TakeWaveDamage();
         }
 
         private void HandleBossDefeated()

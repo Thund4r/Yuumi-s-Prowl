@@ -29,6 +29,7 @@ namespace YuumisProwl.Managers
         // Events
         public System.Action OnGameWon;
         public System.Action OnGameLost;
+        public System.Action OnWaveCleared;
 
         public bool IsGameOver => gameOver;
         public bool IsLevelComplete => levelComplete;
@@ -114,8 +115,11 @@ namespace YuumisProwl.Managers
 
         private void HandleWaveCleared()
         {
-            bossManager.HandleWaveCleared();
-            ballSpawner.SpawnNextWave();
+            if (!bossManager.HandleWaveCleared())
+            {
+                ballSpawner.SpawnNextWave();
+                OnWaveCleared?.Invoke();
+            }
         }
 
         /// <summary>

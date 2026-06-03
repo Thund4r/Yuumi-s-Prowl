@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using YuumisProwl.BallChain;
+using YuumisProwl.Managers;
 
 namespace YuumisProwl.Progression
 {
@@ -31,6 +32,7 @@ namespace YuumisProwl.Progression
     {
         [Header("References")]
         [SerializeField] private MatchProcessor matchProcessor;
+        [SerializeField] private GameManager gameManager;
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private RuntimeStats runtimeStats;
         [SerializeField] private RunConfig config;
@@ -80,6 +82,12 @@ namespace YuumisProwl.Progression
                 matchProcessor.OnMatchVisual += HandleMatchVisual;
             if (ballChainManager != null)
                 ballChainManager.OnFrozenBallDestroyed += HandleFrozenBallDestroyed;
+            if (gameManager != null)
+            {
+                gameManager.OnGameWon += HandleRoundEnded;
+                gameManager.OnGameLost += HandleRoundEnded;
+                gameManager.OnWaveCleared += HandleRoundEnded;
+            }
         }
 
         private void OnDisable()
@@ -94,6 +102,11 @@ namespace YuumisProwl.Progression
             ReleaseAllIcicles();
             targetedBalls.Clear();
             ClearSlowdown();
+            {
+                gameManager.OnGameWon -= HandleRoundEnded;
+                gameManager.OnGameLost -= HandleRoundEnded;
+                gameManager.OnWaveCleared -= HandleRoundEnded;
+            }
         }
 
         private void Update()
@@ -138,6 +151,15 @@ namespace YuumisProwl.Progression
 
             if (runtimeStats.BlueChainSlowdownEnabled)
                 ApplyChainSlowdown();
+        }
+
+        private void HandleRoundEnded()
+        {
+            // Clear all state immediately on round end — no lingering patches or icicles in the victory / defeat screen.
+            TearDownAllPatches();
+            ReleaseAllIcicles();
+            targetedBalls.Clear();
+            ClearSlowdown();
         }
 
         // ============================================================
