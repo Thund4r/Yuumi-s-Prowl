@@ -267,34 +267,44 @@ namespace YuumisProwl.Progression
 
         private void ChargeFrost(BallNode node, int units)
         {
-            if (node.isFrozen) return;
-
+            // Stacks accumulate across hits (no early-out, not zeroed on freeze), so repeated hits
+            // raise frozenPower → more icicles on death.
             int bonus = (runtimeStats.OverloadEnabled && node.freezeStacks > 0) ? 1 : 0;
             node.freezeStacks += units + bonus;
             node.ball.SetFrostStacks(node.freezeStacks);
+
             int threshold = EffectiveFreezeThreshold();
             if (node.freezeStacks >= threshold)
             {
-                node.frozenPower = node.freezeStacks / threshold;
-                node.isFrozen = true;
-                node.freezeStacks = 0;
-                node.ball.SetFrozen(true);
+                if (!node.isFrozen)
+                {
+                    node.isFrozen = true;
+                    node.ball.SetFrozen(true);   // swap to the frozen visual once
+                }
+                node.frozenPower = node.freezeStacks / threshold;   // grows as more stacks accrue
             }
         }
 
         private void ChargeIgnite(BallNode node, int units)
         {
-            if (node.primed) return;
-
+            // Stacks accumulate across hits (no early-out once primed), so repeated hits raise
+            // ignitePower → a bigger mini-blast on death.
             int bonus = (runtimeStats.OverloadEnabled && node.igniteStacks > 0) ? 1 : 0;
             node.igniteStacks += units + bonus;
             node.ball.SetIgniteStacks(node.igniteStacks);
+
             int threshold = config != null ? config.igniteThreshold : 3;
             if (node.igniteStacks >= threshold)
             {
-                node.primed = true;
-                node.ignitePower = node.igniteStacks / threshold;
-                node.ball.SetPrimed(true, node.ignitePower);
+                int newPower = node.igniteStacks / threshold;
+                // Refresh the primed visual only when newly primed or the power actually ticks up,
+                // so we don't restart the blink coroutine on every single hit.
+                if (!node.primed || newPower != node.ignitePower)
+                {
+                    node.primed = true;
+                    node.ignitePower = newPower;
+                    node.ball.SetPrimed(true, newPower);
+                }
             }
         }
 
