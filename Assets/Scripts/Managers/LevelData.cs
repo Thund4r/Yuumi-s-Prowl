@@ -14,8 +14,6 @@ namespace YuumisProwl
         public string levelName = "Level 1";
 
         [Header("Ball Settings")]
-        [Tooltip("Total number of balls to spawn across the whole level.")]
-        public int totalBalls = 50;
         [Tooltip("How many different colors are active for this level (1–5).")]
         [Range(1, 5)]
         public int colorCount = 4;

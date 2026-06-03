@@ -20,7 +20,7 @@ namespace YuumisProwl.Progression
         [Tooltip("Curve multiplier applied to essence based on floor progress (0 at first, 1 at last). Empty = constant 1.0.")]
         public AnimationCurve essenceDepthCurve = AnimationCurve.Constant(0f, 1f, 1f);
 
-        [Tooltip("If enabled, essence is multiplied by (ballSpeedMult * totalBallsMult) for difficulty scaling.")]
+        [Tooltip("If enabled, essence is multiplied by the floor's ballSpeedMult for difficulty scaling.")]
         public bool essenceDifficultyScaling = true;
 
         /// <summary>

@@ -31,9 +31,6 @@ namespace YuumisProwl.Progression
         [Tooltip("Multiplier applied to LevelData.ballSpeed at floor%. X=0 is the first floor, X=1 is the last. Empty curve = constant 1.0 (no scaling).")]
         public AnimationCurve ballSpeedCurve = AnimationCurve.Constant(0f, 1f, 1f);
 
-        [Tooltip("Multiplier applied to LevelData.totalBalls at floor%. X=0 is the first floor, X=1 is the last. Empty curve = constant 1.0 (no scaling). Result is rounded and clamped to >= 1.")]
-        public AnimationCurve totalBallsCurve = AnimationCurve.Constant(0f, 1f, 1f);
-
         [Header("Gold Rewards")]
         [Tooltip("Base gold awarded per gameplay floor cleared.")]
         [Min(0)] public int baseGoldPerFloor = 30;
@@ -135,13 +132,6 @@ namespace YuumisProwl.Progression
         {
             if (ballSpeedCurve == null || ballSpeedCurve.length == 0) return 1f;
             return ballSpeedCurve.Evaluate(Mathf.Clamp01(t));
-        }
-
-        /// <summary>Safe sampler — see SampleBallSpeedMult.</summary>
-        public float SampleTotalBallsMult(float t)
-        {
-            if (totalBallsCurve == null || totalBallsCurve.length == 0) return 1f;
-            return totalBallsCurve.Evaluate(Mathf.Clamp01(t));
         }
 
         /// <summary>

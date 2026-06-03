@@ -3488,7 +3488,7 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   ballSpawner: {fileID: 1842243455}
   gameManager: {fileID: 1842243459}
-  bossManager: {fileID: 0}
+  bossManager: {fileID: 1775654144}
   mapRoot: {fileID: 608129041}
   pauseBetweenMaps: 0.5
 --- !u!4 &742150878
@@ -9614,30 +9614,10 @@ MonoBehaviour:
   colorCount: 2
   totalBallsToSpawn: 50
   introDuration: 5
-  introSpeedCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 1
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
+  introSurgeMultiplier: 5
+  waveBallCount: 20
+  waveSurgeMultiplier: 2.5
+  waveSurgeDuration: 1.5
 --- !u!114 &1842243456
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9719,6 +9699,7 @@ MonoBehaviour:
   matchProcessor: {fileID: 1842243460}
   ballSpawner: {fileID: 1842243455}
   bossManager: {fileID: 1775654144}
+  waveCleared: 0
 --- !u!114 &1842243460
 MonoBehaviour:
   m_ObjectHideFlags: 0

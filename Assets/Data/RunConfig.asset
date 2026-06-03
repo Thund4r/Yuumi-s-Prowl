@@ -87,11 +87,11 @@ MonoBehaviour:
   rageMeterMax: 100
   rageGainPerBall: 10
   rageDuration: 5
-  baseArcBounces: 1
-  arcBouncesPerOrangeUpgrade: 1
+  baseArcBounces: 5
+  arcBouncesPerOrangeUpgrade: 2
   arcRange: 3
   arcRageGain: 5
   igniteThreshold: 3
-  igniteMiniRadius: 1
+  igniteMiniRadius: 1.5
   staticThreshold: 3
   superchargeEveryNth: 3

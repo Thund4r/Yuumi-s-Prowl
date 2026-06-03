@@ -49,7 +49,7 @@ namespace YuumisProwl.Managers
         /// used by RunManager to enforce the player's currently-unlocked colour count.
         /// Pass -1 (default) to use the LevelData value unchanged.
         /// </summary>
-        public void LoadMap(Map prefab, float ballSpeedMult = 1f, float totalBallsMult = 1f, int colorCountCap = -1)
+        public void LoadMap(Map prefab, float ballSpeedMult = 1f, int colorCountCap = -1)
         {
             if (prefab == null)
             {
@@ -58,10 +58,10 @@ namespace YuumisProwl.Managers
             }
 
             if (loadRoutine != null) StopCoroutine(loadRoutine);
-            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, totalBallsMult, colorCountCap));
+            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, colorCountCap));
         }
 
-        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, float totalBallsMult, int colorCountCap)
+        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, int colorCountCap)
         {
             IsTransitioning = true;
 
@@ -88,7 +88,6 @@ namespace YuumisProwl.Managers
             if (data != null)
             {
                 float effectiveSpeed = data.ballSpeed * ballSpeedMult;
-                int effectiveTotalBalls = Mathf.Max(1, Mathf.RoundToInt(data.totalBalls * totalBallsMult));
 
                 if (ballChainManager != null)
                     ballChainManager.SetSpeed(effectiveSpeed);
@@ -99,7 +98,6 @@ namespace YuumisProwl.Managers
                     if (colorCountCap > 0)
                         effectiveColorCount = Mathf.Min(effectiveColorCount, colorCountCap);
                     ballSpawner.SetColorCount(effectiveColorCount);
-                    ballSpawner.SetTotalBalls(effectiveTotalBalls);
                 }
             }
 

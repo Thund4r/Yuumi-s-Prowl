@@ -210,15 +210,14 @@ namespace YuumisProwl.Progression
 
                     float t = GetFloorProgress();
                     float ballSpeedMult = config.SampleBallSpeedMult(t);
-                    float totalBallsMult = config.SampleTotalBallsMult(t);
 
                     // Subtract the player's ball-speed reduction (from meta upgrades).
                     float speedReduction = runtimeStats != null ? runtimeStats.BallSpeedReduction : 0f;
                     ballSpeedMult = Mathf.Max(0.1f, ballSpeedMult - speedReduction);
 
                     int unlockedColors = PlayerProfileManager.GetUnlockedColorCount();
-                    Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, totalBalls×{totalBallsMult:F2}, colours capped at {unlockedColors}");
-                    levelManager.LoadMap(node.mapPrefab, ballSpeedMult, totalBallsMult, unlockedColors);
+                    Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, colours capped at {unlockedColors}");
+                    levelManager.LoadMap(node.mapPrefab, ballSpeedMult, unlockedColors);
                     break;
 
                 case RunNodeType.Shop:
@@ -500,9 +499,8 @@ namespace YuumisProwl.Progression
 
             float finalProgress = floorsCleared > 0 ? (floorsCleared - 1) / (float)Mathf.Max(1, state.nodes.Length - 1) : 0f;
             float ballSpeedMult = config != null ? config.SampleBallSpeedMult(finalProgress) : 1f;
-            float totalBallsMult = config != null ? config.SampleTotalBallsMult(finalProgress) : 1f;
             float difficultyMult = metaProgressionSettings.essenceDifficultyScaling
-                ? ballSpeedMult * totalBallsMult
+                ? ballSpeedMult
                 : 1f;
 
             // Essence-gain bonus from meta upgrades is baked into RuntimeStats at run start.

@@ -24,6 +24,7 @@ namespace YuumisProwl.Managers
         private bool gameOver = false;
         private bool levelComplete = false;
         private bool gameplayStarted = false;
+        public bool waveCleared = false;
 
         // Events
         public System.Action OnGameWon;
@@ -70,7 +71,15 @@ namespace YuumisProwl.Managers
             // a faster-firing duplicate of the empty-chain case.
             if (!ballChainManager.HasVisibleBalls())
             {
-                WinGame();
+                if (!waveCleared)
+                {
+                    waveCleared = true;
+                    HandleWaveCleared();
+                }
+            }
+            else
+            {
+                waveCleared = false;
             }
         }
 
@@ -101,6 +110,13 @@ namespace YuumisProwl.Managers
         {
             gameplayStarted = true;
         }
+        
+
+        private void HandleWaveCleared()
+        {
+            bossManager.HandleWaveCleared();
+            ballSpawner.SpawnNextWave();
+        }
 
         /// <summary>
         /// Handles chain cleared event. All balls were destroyed via matches —
@@ -109,10 +125,11 @@ namespace YuumisProwl.Managers
         /// </summary>
         private void HandleChainCleared()
         {
-            if (gameOver) return;
-
-            Debug.Log("Level Complete — all balls cleared!");
-            WinGame();
+            if (!waveCleared)
+            {
+                waveCleared = true;
+                HandleWaveCleared();
+            }
         }
 
         /// <summary>

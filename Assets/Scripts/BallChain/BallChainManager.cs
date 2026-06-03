@@ -100,7 +100,9 @@ namespace YuumisProwl.BallChain
 
         public void SetChainSpeedMultiplier(float multiplier)
         {
-            ChainSpeedMultiplier = Mathf.Clamp(multiplier, 0.01f, 10f);
+            // Upper bound is generous so the wave-emergence surge can move fast. Blue ice
+            // slowdown only ever sets values below 1, so the high cap doesn't affect it.
+            ChainSpeedMultiplier = Mathf.Clamp(multiplier, 0.01f, 50f);
         }
         public int BallCount
         {
@@ -844,26 +846,6 @@ namespace YuumisProwl.BallChain
                 }
             }
             return false;
-        }
-
-        /// <summary>
-        /// True when the back-most segment's tail has cleared the hole spacing,
-        /// signaling that BallSpawner can drop a new tail ball.
-        /// </summary>
-        public bool NeedsTailBall()
-        {
-            ChainSegment back = GetBackSegment();
-            // Empty chain: don't auto-spawn. The intro populates the initial chain via
-            // SpawnAllBalls; if we returned true here, BallSpawner.Update would silently
-            // drop an invisible queue ball during LevelManager's pre-intro pause and the
-            // retreat-win check (BallCount > 0 && !HasVisibleBalls) would fire instantly.
-            if (back == null || back.IsEmpty) return false;
-
-            float pathLength = pathController.GetPathLength();
-            if (pathLength <= 0f) return false;
-
-            float spacingProgress = ballSpacing / pathLength;
-            return back.Tail.pathProgress > spawnProgress + spacingProgress;
         }
 
         // --------------------------------------------------------------

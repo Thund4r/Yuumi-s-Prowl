@@ -24,13 +24,23 @@ namespace YuumisProwl.Managers
 
         public void SpawnBoss(Transform bossSpawnPoint)
         {
-            currentBoss = Instantiate(bossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation);
+            if (bossSpawnPoint == null)
+            {
+                Debug.LogError("BossManager: Boss spawn point is null!");
+                return;
+            }
+            currentBoss = Instantiate(bossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation, bossSpawnPoint);
             currentBoss.OnDefeated += HandleBossDefeated;
         }
 
         public void HandleBallsDestroyed(int count, BallColor color)
         {
             currentBoss.TakeDamage(count);
+        }
+
+        public void HandleWaveCleared()
+        {
+            currentBoss.TakeWaveDamage();
         }
 
         private void HandleBossDefeated()

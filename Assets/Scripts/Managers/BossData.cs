@@ -14,6 +14,7 @@ namespace YuumisProwl
         [Header("Wave Settings")]
         public float waveSpawnInterval;
         public float ballSpeedMultiplier;
+        public int waveDamage;
         
         [Header("Enemy Settings")]
         public float enemySpawnInterval;

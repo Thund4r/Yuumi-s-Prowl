@@ -6,7 +6,8 @@ using YuumisProwl;
 namespace YuumisProwl.BallChain
 {
     /// <summary>
-    /// Spawns balls and manages the intro animation.
+    /// Spawns ball waves (the opening intro wave plus mid-level waves) and drives the
+    /// emergence speed surge.
     /// </summary>
     public class BallSpawner : MonoBehaviour
     {
@@ -16,23 +17,29 @@ namespace YuumisProwl.BallChain
         [SerializeField] private YuumisProwl.Progression.RuntimeStats runtimeStats;
 
         [Header("Spawn Settings")]
-        [Tooltip("How many balls to show in the intro animation. Remaining balls trickle in as tail spawns.")]
+        [Tooltip("Number of balls in the opening intro wave.")]
         [SerializeField] private int ballCount = 30;
         [SerializeField] private int colorCount = 4;
-        [Tooltip("Total balls for this level. Overridden by LevelManager at runtime.")]
-        [SerializeField] private int totalBallsToSpawn = 50;
 
-        [Header("Intro Animation")]
+        [Header("Intro Wave")]
+        [Tooltip("Duration of the opening wave's surge. Longer than a normal wave for a dramatic entrance.")]
         [SerializeField] private float introDuration = 7f;
-        [SerializeField] private AnimationCurve introSpeedCurve = AnimationCurve.EaseInOut(0f, 0f, 1f, 1f);
+        [Tooltip("Peak chain speed multiplier for the opening wave's surge.")]
+        [SerializeField] private float introSurgeMultiplier = 1.5f;
+
+        [Header("Wave Settings")]
+        [Tooltip("Balls dumped into the queue (below the hole) per wave. Normal chain movement pulls them up.")]
+        [SerializeField] private int waveBallCount = 20;
+        [Tooltip("Chain speed multiplier while a wave surges up out of the hole, then restored to 1.")]
+        [SerializeField] private float waveSurgeMultiplier = 2.5f;
+        [Tooltip("Seconds the surge multiplier is held before restoring normal speed.")]
+        [SerializeField] private float waveSurgeDuration = 1.5f;
 
         private List<BallColor> recentColors = new List<BallColor>(2);
-        private int ballsSpawned = 0;
+        private Coroutine surgeRoutine;
 
         // Expose the configured color count so other systems can read the canonical value
         public int ColorCount => colorCount;
-        public bool AllBallsSpawned => ballsSpawned >= totalBallsToSpawn;
-        public int BallsRemaining => Mathf.Max(0, totalBallsToSpawn - ballsSpawned);
 
         /// <summary>
         /// True while the intro animation is playing. 
@@ -57,115 +64,84 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Resets spawner state and starts the intro animation.
+        /// Resets spawner state and starts the opening wave.
         /// Called on first Start and by LevelManager on level transitions.
         /// </summary>
         public void StartLevel()
         {
             StopAllCoroutines();
-            ballsSpawned = 0;
+            surgeRoutine = null;
             recentColors.Clear();
             IsPlayingIntro = false;
-            StartCoroutine(SpawnAndAnimate());
+            StartCoroutine(IntroRoutine());
         }
 
-        private IEnumerator SpawnAndAnimate()
+        /// <summary>
+        /// Opening wave. Uses the same queue-and-surge mechanism as mid-level waves, so the
+        /// chain eases from the surge peak straight into normal gameplay speed — no stop or
+        /// teleport. Blocks input only until the first ball crests the hole, then fires
+        /// OnIntroComplete so GameManager's win/wave loop can begin.
+        /// </summary>
+        private IEnumerator IntroRoutine()
         {
             IsPlayingIntro = true;
+            StartWave(ballCount, introSurgeMultiplier, introDuration);
 
-            // Pause normal chain movement during intro
-            ballChainManager.SetMoving(false);
-
-            // Spawn all balls at the start of the path, stacked at progress 0
-            SpawnAllBalls();
-
-            // Animate them spreading out along the path
-            yield return StartCoroutine(PlayIntroAnimation());
-
-            // Resume normal gameplay
-            ballChainManager.SetMoving(true);
-            IsPlayingIntro = false;
-            OnIntroComplete?.Invoke();
-
-            Debug.Log("Intro complete — gameplay started.");
-        }
-
-        /// <summary>
-        /// Spawns all balls at progress 0, tightly packed.
-        /// They'll be animated to their final positions by the intro.
-        /// </summary>
-        private void SpawnAllBalls()
-        {
-            int introCount = Mathf.Min(ballCount, totalBallsToSpawn);
-            for (int i = 0; i < introCount; i++)
-            {
-                ballChainManager.SpawnBall(PickColor());
-                ballsSpawned++;
-            }
-
-            // Stack all balls at progress 0
-            var chain = ballChainManager.GetBallChain();
-            for (int i = 0; i < chain.Count; i++)
-            {
-                chain[i].pathProgress = 0f;
-            }
-        }
-
-        /// <summary>
-        /// Animates balls from stacked at the start to evenly spaced along the path.
-        /// Uses an animation curve: accelerates out, then decelerates to a stop.
-        /// </summary>
-        private IEnumerator PlayIntroAnimation()
-        {
-            var chain = ballChainManager.GetBallChain();
-            if (chain.Count == 0) yield break;
-
-            float pathLength = ballChainManager.GetPathLength();
-            if (pathLength <= 0f) yield break;
-
-            float spacingProgress = ballChainManager.BallSpacing / pathLength;
-
-            // The lead ball's final progress (all others are spaced behind it)
-            float leadTargetProgress = (chain.Count - 1) * spacingProgress;
-
+            // Wait until the first ball is on screen (safety timeout in case the path is
+            // misconfigured and nothing ever rises out of the hole).
             float elapsed = 0f;
-
             while (elapsed < introDuration)
             {
                 elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / introDuration);
-                float curveT = introSpeedCurve.Evaluate(t);
-
-                // Animate lead ball from 0 to its target
-                float leadProgress = Mathf.Lerp(0f, leadTargetProgress, curveT);
-
-                // Every ball is evenly spaced behind the lead
-                for (int i = 0; i < chain.Count; i++)
-                {
-                    chain[i].pathProgress = leadProgress - (i * spacingProgress);
-                }
-
-                ballChainManager.UpdateBallPositionsPublic();
                 yield return null;
             }
 
-            // Snap to final positions
-            for (int i = 0; i < chain.Count; i++)
-            {
-                chain[i].pathProgress = leadTargetProgress - (i * spacingProgress);
-            }
-            ballChainManager.UpdateBallPositionsPublic();
+            IsPlayingIntro = false;
+            OnIntroComplete?.Invoke();
+            Debug.Log("Intro wave up — gameplay started.");
         }
-        private void Update()
-        {
-            if (IsPlayingIntro || ballChainManager == null) return;
-            if (ballsSpawned >= totalBallsToSpawn) return;
 
-            if (ballChainManager.NeedsTailBall())
-            {
+        /// <summary>
+        /// Spawns the next wave: drops a batch of balls into the queue below the hole and lets
+        /// normal chain movement pull them up, surging the chain speed then easing back to
+        /// normal. Does NOT block input — nothing hard-writes pathProgress, so the player can
+        /// shoot into the wave the instant it crests the hole.
+        /// </summary>
+        public void SpawnNextWave()
+        {
+            StartWave(waveBallCount, waveSurgeMultiplier, waveSurgeDuration);
+        }
+
+        private void StartWave(int count, float surgeMultiplier, float surgeDuration)
+        {
+            if (ballChainManager == null) return;
+
+            // Spawn the wave below the hole (SpawnBall appends to the back-most segment at
+            // spawnProgress and spaced behind it). The surge lifts it into view from below.
+            for (int i = 0; i < count; i++)
                 ballChainManager.SpawnBall(PickColor());
-                ballsSpawned++;
+
+            ballChainManager.SetMoving(true);
+
+            if (surgeRoutine != null) StopCoroutine(surgeRoutine);
+            surgeRoutine = StartCoroutine(WaveSurge(surgeMultiplier, surgeDuration));
+        }
+
+        // Eases the chain speed from the surge peak smoothly down to normal (x1) over the
+        // duration. SmoothStep landing means no speed jump when the surge ends — the intro
+        // flows straight into gameplay, and mid-level waves settle without a hitch.
+        private IEnumerator WaveSurge(float peakMultiplier, float duration)
+        {
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                ballChainManager.SetChainSpeedMultiplier(Mathf.SmoothStep(peakMultiplier, 1f, t));
+                yield return null;
             }
+            ballChainManager.SetChainSpeedMultiplier(1f);
+            surgeRoutine = null;
         }
 
         /// <summary>
@@ -182,11 +158,6 @@ namespace YuumisProwl.BallChain
         public void SetColorCount(int count)
         {
             colorCount = Mathf.Clamp(count, 1, 5);
-        }
-
-        public void SetTotalBalls(int total)
-        {
-            totalBallsToSpawn = Mathf.Max(1, total);
         }
     }
 }

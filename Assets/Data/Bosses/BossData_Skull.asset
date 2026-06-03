@@ -16,4 +16,5 @@ MonoBehaviour:
   maxHealth: 300
   waveSpawnInterval: 1
   ballSpeedMultiplier: 1
+  waveDamage: 40
   enemySpawnInterval: 1
