@@ -3,7 +3,12 @@
     "allow": [
       "PowerShell(Remove-Item -Force \"Assets/Scripts/Progression/Editor/UpgradeDefinitionEditor.cs\", \"Assets/Scripts/Progression/Editor/UpgradeDefinitionEditor.cs.meta\" -ErrorAction SilentlyContinue; if \\(\\(Test-Path \"Assets/Scripts/Progression/Editor\"\\) -and \\(\\(Get-ChildItem \"Assets/Scripts/Progression/Editor\" -Force | Measure-Object\\).Count -eq 0\\)\\) { Remove-Item -Force \"Assets/Scripts/Progression/Editor\" })",
       "Bash(git rm *)",
-      "Bash(git --no-pager diff HEAD -- \"*.cs\")"
+      "Bash(git --no-pager diff HEAD -- \"*.cs\")",
+      "PowerShell(Get-Command python, py, node, npx -ErrorAction SilentlyContinue)",
+      "Bash(git -C \"f:/Unity Projects/Yuumi's Prowl\" diff --stat HEAD)",
+      "Bash(git -C \"f:/Unity Projects/Yuumi's Prowl\" diff -- ProjectSettings/ProjectSettings.asset ProjectSettings/QualitySettings.asset)",
+      "Bash(git -C \"f:/Unity Projects/Yuumi's Prowl\" diff -- \"Assets/Scripts/Projectile/Projectile.cs\")",
+      "Bash(git -C \"f:/Unity Projects/Yuumi's Prowl\" diff -- \"Assets/Scenes/Game.unity\")"
     ]
   }
 }

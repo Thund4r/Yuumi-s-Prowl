@@ -45,14 +45,18 @@ namespace YuumisProwl.PowerUps
 
         private void Update()
         {
-            #if UNITY_EDITOR || UNITY_STANDALONE
+            // Power-up slot selection — a real gameplay control on any platform with a keyboard
+            // (editor, desktop, and the WebGL build). Mobile uses the on-screen slot buttons.
+            #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL
             if (Input.GetKeyDown(KeyCode.Alpha1)) EquipSlot(0);
             if (Input.GetKeyDown(KeyCode.Alpha2)) EquipSlot(1);
             if (Input.GetKeyDown(KeyCode.Alpha3)) EquipSlot(2);
             if (Input.GetKeyDown(KeyCode.Alpha4)) EquipSlot(3);
             if (Input.GetKeyDown(KeyCode.Alpha0)) UnequipPowerUp();
+            #endif
 
-            // Debug: press P to manually grant a Bomb
+            // Debug cheat: press P to grant a free Bomb. Kept out of web and mobile builds.
+            #if UNITY_EDITOR || UNITY_STANDALONE
             if (Input.GetKeyDown(KeyCode.P))
             {
                 AddPowerUp(PowerUpType.Bomb);

@@ -18,6 +18,7 @@ namespace YuumisProwl.Managers
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private MatchProcessor matchProcessor;
         [SerializeField] private BallSpawner ballSpawner;
+        [SerializeField] private BossManager bossManager;
 
         // Game state
         private bool gameOver = false;
@@ -49,6 +50,8 @@ namespace YuumisProwl.Managers
             ballChainManager.OnBallReachedEnd += HandleBallReachedEnd;
             if (ballSpawner != null)
                 ballSpawner.OnIntroComplete += HandleIntroComplete;
+            if (bossManager != null)
+                bossManager.OnBossDefeated += WinGame;
         }
 
         private void Update()
@@ -79,6 +82,8 @@ namespace YuumisProwl.Managers
                 ballChainManager.OnBallReachedEnd -= HandleBallReachedEnd;
             if (ballSpawner != null)
                 ballSpawner.OnIntroComplete -= HandleIntroComplete;
+            if (bossManager != null)
+                bossManager.OnBossDefeated -= WinGame;
         }
 
         /// <summary>

@@ -84,6 +84,11 @@ namespace YuumisProwl.BallChain
         private bool isMoving = true;
         private int nextSegmentId = 0;
 
+        // Per-frame timing of Update, read by the on-screen PerfOverlay so we can measure the
+        // real cost in a WebGL build (the editor profiler only reaches Play mode, not the build).
+        public static double UpdateMilliseconds;
+        private readonly System.Diagnostics.Stopwatch updateStopwatch = new System.Diagnostics.Stopwatch();
+
         public float BallSpeed => ballSpeed;
         public float BallSpacing => ballSpacing;
         /// <summary>
@@ -132,6 +137,7 @@ namespace YuumisProwl.BallChain
 
         private void Update()
         {
+            updateStopwatch.Restart();
             if (isMoving)
             {
                 MoveChain(Time.deltaTime);
@@ -140,6 +146,8 @@ namespace YuumisProwl.BallChain
                 UpdateBallVisibility();
                 UpdateBallPositions();
             }
+            updateStopwatch.Stop();
+            UpdateMilliseconds = updateStopwatch.Elapsed.TotalMilliseconds;
         }
 
         /// <summary>
@@ -674,6 +682,34 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
+        /// Removes every ball within `radius` of `center` (an AoE blast): dedups by chain index and
+        /// removes high-index-first so indices stay valid. Returns the number removed — callers hand
+        /// that to MatchProcessor.ProcessPierceAftermath for cascades. Shared by the Bomb power-up,
+        /// red-match explosions, and the Conductor ignite mini-blast.
+        /// </summary>
+        public int RemoveBallsInRadius(Vector3 center, float radius)
+        {
+            if (radius <= 0f) return 0;
+
+            Collider[] hits = Physics.OverlapSphere(center, radius);
+            List<int> indices = new List<int>();
+            for (int i = 0; i < hits.Length; i++)
+            {
+                if (!hits[i].CompareTag("Ball")) continue;
+                Ball ball = hits[i].GetComponent<Ball>();
+                if (ball != null && !indices.Contains(ball.ChainIndex))
+                    indices.Add(ball.ChainIndex);
+            }
+            if (indices.Count == 0) return 0;
+
+            indices.Sort((a, b) => b.CompareTo(a));   // high → low so earlier indices stay valid
+            for (int i = 0; i < indices.Count; i++)
+                RemoveBallAtIndex(indices[i]);
+
+            return indices.Count;
+        }
+
+        /// <summary>
         /// Scans every segment for internal gaps wider than ballSpacing and splits them.
         /// </summary>
         private void SplitSegmentsAtGaps()
@@ -937,6 +973,18 @@ namespace YuumisProwl.BallChain
             for (int s = 0; s < segments.Count; s++)
                 flat.AddRange(segments[s].balls);
             return flat;
+        }
+
+        /// <summary>
+        /// Non-allocating variant of GetBallChain: clears and re-fills `buffer` with the front-to-back
+        /// ball list. Lets per-hop / per-frame callers (e.g. the arc) reuse one buffer instead of
+        /// allocating a fresh List every call.
+        /// </summary>
+        public void GetBallChainNonAlloc(List<BallNode> buffer)
+        {
+            buffer.Clear();
+            for (int s = 0; s < segments.Count; s++)
+                buffer.AddRange(segments[s].balls);
         }
 
         /// <summary>

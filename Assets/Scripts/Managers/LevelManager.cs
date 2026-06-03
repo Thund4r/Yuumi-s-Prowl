@@ -17,6 +17,7 @@ namespace YuumisProwl.Managers
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private BallSpawner ballSpawner;
         [SerializeField] private GameManager gameManager;
+        [SerializeField] private BossManager bossManager;
 
         [Header("Maps")]
         [Tooltip("Where instantiated maps are parented. Leave null to parent to this transform.")]
@@ -101,6 +102,9 @@ namespace YuumisProwl.Managers
                     ballSpawner.SetTotalBalls(effectiveTotalBalls);
                 }
             }
+
+            if (bossManager != null)
+                bossManager.SpawnBoss(currentMapInstance.BossSpawnPoint);
 
             if (gameManager != null)
                 gameManager.InitializeGame();

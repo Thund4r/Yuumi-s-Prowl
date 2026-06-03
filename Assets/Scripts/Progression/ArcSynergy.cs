@@ -62,13 +62,14 @@ namespace YuumisProwl.Progression
         private readonly List<LineRenderer> allLines = new List<LineRenderer>(8);
         private readonly List<Vector3> arcPathBuffer = new List<Vector3>(32);
         private readonly List<BallNode> candidateBuffer = new List<BallNode>(16);
+        private readonly List<BallNode> flatChainBuffer = new List<BallNode>(64);
         private FrameCoalescer igniteCoalescer;
         private int arcsFired;
 
         private void Awake()
         {
             float mergeRadius = config != null ? config.igniteMiniRadius : 1f;
-            igniteCoalescer = new FrameCoalescer(this, mergeRadius, (center, count, ignitePower) => ExplodeMini(center, ignitePower));
+            igniteCoalescer = new FrameCoalescer(this, mergeRadius, (center, count, weight) => ExplodeMini(center, weight));
         }
 
         private void OnEnable()
@@ -219,7 +220,8 @@ namespace YuumisProwl.Progression
         /// </summary>
         private BallNode PickHopWithinChainRange(Ball fromBall, int chainRange, List<Ball> recent)
         {
-            var flat = ballChainManager.GetBallChain();   // front-to-back
+            ballChainManager.GetBallChainNonAlloc(flatChainBuffer);
+            var flat = flatChainBuffer;                   // front-to-back, reused buffer (no per-hop alloc)
             if (flat == null || flat.Count == 0) return null;
 
             int curIdx = -1;
@@ -325,32 +327,25 @@ namespace YuumisProwl.Progression
         private void HandleIgnitedBallDestroyed(Vector3 worldPos, int ignitePower)
         {
             if (runtimeStats == null || !runtimeStats.ConductorEnabled) return;
-            igniteCoalescer.Add(worldPos, ignitePower);
+            // Pass the OVERCHARGE excess (power − 1). The coalescer sums it per cluster, so baseline
+            // primed balls (power 1) contribute 0 and only real overcharge enlarges the blast.
+            igniteCoalescer.Add(worldPos, ignitePower - 1);
         }
 
-        /// <summary>Small AoE removal at a primed-red death site. Mirrors ExplosionSynergy.</summary>
-        private void ExplodeMini(Vector3 center, int ignitePower)
+        /// <summary>
+        /// Small AoE removal at a primed-red death site, via the shared BallChainManager helper.
+        /// `excess` is the cluster's summed overcharge (Σ power−1); radius = base × (1 + excess), so
+        /// baseline primed balls keep the base radius and only overcharge enlarges the blast.
+        /// </summary>
+        private void ExplodeMini(Vector3 center, int excess)
         {
             if (ballChainManager == null) return;
-            float radius = config != null ? config.igniteMiniRadius : 1f;
+            float baseRadius = config != null ? config.igniteMiniRadius : 1f;
+            float radius = baseRadius * (1 + Mathf.Max(0, excess));
 
-            Collider[] hits = Physics.OverlapSphere(center, radius * Mathf.Max(1, ignitePower));
-            var indices = new List<int>();
-            for (int i = 0; i < hits.Length; i++)
-            {
-                if (!hits[i].CompareTag("Ball")) continue;
-                Ball ball = hits[i].GetComponent<Ball>();
-                if (ball != null && !indices.Contains(ball.ChainIndex))
-                    indices.Add(ball.ChainIndex);
-            }
-            if (indices.Count == 0) return;
-
-            indices.Sort((a, b) => b.CompareTo(a));   // high → low
-            for (int i = 0; i < indices.Count; i++)
-                ballChainManager.RemoveBallAtIndex(indices[i]);
-
-            if (matchProcessor != null)
-                matchProcessor.ProcessPierceAftermath(indices.Count);
+            int removed = ballChainManager.RemoveBallsInRadius(center, radius);
+            if (removed > 0 && matchProcessor != null)
+                matchProcessor.ProcessPierceAftermath(removed);
         }
 
         // ============================================================

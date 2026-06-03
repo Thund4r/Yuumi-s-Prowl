@@ -75,31 +75,15 @@ namespace YuumisProwl.Progression
             if (ballChainManager == null) return;
 
             float radius = runtimeStats != null ? runtimeStats.ExplosionRadius : 3f;
-            if (radius <= 0f) return;
-
-            Collider[] hits = Physics.OverlapSphere(center, radius);
-            List<int> indices = new List<int>();
-            foreach (var hit in hits)
-            {
-                if (!hit.CompareTag("Ball")) continue;
-                Ball ball = hit.GetComponent<Ball>();
-                if (ball != null && !indices.Contains(ball.ChainIndex))
-                    indices.Add(ball.ChainIndex);
-            }
-
-            if (indices.Count == 0) return;
-
-            // Remove highest indices first so lower indices stay valid.
-            indices.Sort((a, b) => b.CompareTo(a));
-            for (int i = 0; i < indices.Count; i++)
-                ballChainManager.RemoveBallAtIndex(indices[i]);
+            int removed = ballChainManager.RemoveBallsInRadius(center, radius);
+            if (removed == 0) return;
 
             // Hand off to MatchProcessor for cascades + chain-cleared detection — same
             // path the Bomb power-up uses.
             if (matchProcessor != null)
-                matchProcessor.ProcessPierceAftermath(indices.Count);
+                matchProcessor.ProcessPierceAftermath(removed);
 
-            Debug.Log($"ExplosionSynergy: red-match explosion destroyed {indices.Count} balls (radius {radius:F1}).");
+            Debug.Log($"ExplosionSynergy: red-match explosion destroyed {removed} balls (radius {radius:F1}).");
         }
     }
 }

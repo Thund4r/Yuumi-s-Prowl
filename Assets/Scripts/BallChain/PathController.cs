@@ -18,6 +18,13 @@ namespace YuumisProwl.BallChain
         private SplineContainer splineContainer;
         private float totalPathLength;
 
+        [Tooltip("How many samples the spline is baked into at load (a lookup table). Higher = smoother, slightly more memory. 512 is plenty for a smooth path.")]
+        [SerializeField] private int lookupResolution = 512;
+        // Baked once at load so the per-frame GetPointOnPath/GetDirectionOnPath become cheap array
+        // lookups instead of expensive SplineContainer evaluations (the main per-frame cost on WebGL).
+        private Vector3[] pointLUT;
+        private Vector3[] directionLUT;
+
         private void Awake()
         {
             InitializePath();
@@ -34,6 +41,28 @@ namespace YuumisProwl.BallChain
             }
 
             totalPathLength = splineContainer.CalculateLength();
+            BakeLookupTables();
+        }
+
+        /// <summary>
+        /// Samples the spline once into position + direction lookup tables. Per-frame queries then
+        /// interpolate these arrays instead of evaluating the spline, which internally does an
+        /// expensive arc-length conversion on every call. Re-run whenever the path is (re)bound.
+        /// </summary>
+        private void BakeLookupTables()
+        {
+            int n = Mathf.Max(2, lookupResolution);
+            pointLUT = new Vector3[n];
+            directionLUT = new Vector3[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)(n - 1);
+                float3 pos = splineContainer.EvaluatePosition(t);
+                pointLUT[i] = new Vector3(pos.x, pos.y, 0f);
+                float3 tan = splineContainer.EvaluateTangent(t);
+                Vector3 dir = new Vector3(tan.x, tan.y, 0f);
+                directionLUT[i] = dir.sqrMagnitude > 1e-8f ? dir.normalized : Vector3.right;
+            }
         }
 
         /// <summary>
@@ -41,11 +70,20 @@ namespace YuumisProwl.BallChain
         /// </summary>
         public Vector3 GetPointOnPath(float progress)
         {
-            if (splineContainer == null) return Vector3.zero;
-
             progress = Mathf.Clamp01(progress);
-            float3 position = splineContainer.EvaluatePosition(progress);
-            return new Vector3(position.x, position.y, 0f);
+
+            // Fallback to a direct evaluation before the table is baked (e.g. edit-mode gizmos).
+            if (pointLUT == null)
+            {
+                if (splineContainer == null) return Vector3.zero;
+                float3 p = splineContainer.EvaluatePosition(progress);
+                return new Vector3(p.x, p.y, 0f);
+            }
+
+            float f = progress * (pointLUT.Length - 1);
+            int i = (int)f;
+            if (i >= pointLUT.Length - 1) return pointLUT[pointLUT.Length - 1];
+            return Vector3.Lerp(pointLUT[i], pointLUT[i + 1], f - i);
         }
 
         /// <summary>
@@ -53,12 +91,21 @@ namespace YuumisProwl.BallChain
         /// </summary>
         public Vector3 GetDirectionOnPath(float progress)
         {
-            if (splineContainer == null) return Vector3.right;
-
             progress = Mathf.Clamp01(progress);
-            float3 tangent = splineContainer.EvaluateTangent(progress);
-            Vector3 dir = new Vector3(tangent.x, tangent.y, 0f).normalized;
-            return dir;
+
+            // Fallback to a direct evaluation before the table is baked (e.g. edit-mode gizmos).
+            if (directionLUT == null)
+            {
+                if (splineContainer == null) return Vector3.right;
+                float3 tangent = splineContainer.EvaluateTangent(progress);
+                Vector3 t = new Vector3(tangent.x, tangent.y, 0f);
+                return t.sqrMagnitude > 1e-8f ? t.normalized : Vector3.right;
+            }
+
+            float f = progress * (directionLUT.Length - 1);
+            int i = (int)f;
+            if (i >= directionLUT.Length - 1) return directionLUT[directionLUT.Length - 1];
+            return Vector3.Lerp(directionLUT[i], directionLUT[i + 1], f - i).normalized;
         }
 
         /// <summary>

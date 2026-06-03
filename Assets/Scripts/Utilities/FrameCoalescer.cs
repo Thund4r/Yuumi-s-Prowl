@@ -10,33 +10,34 @@ namespace YuumisProwl.Utilities
     /// burst, far-apart ones stay separate. Bounds same-frame pile-ups while letting
     /// cross-frame chain reactions propagate (each frame is its own batch).
     ///
-    /// Shared by effects that can be triggered many times in one destruction event
-    /// (ignite mini-blasts, cryo bursts): one burst per real location, never N stacked on the
-    /// same instant. The one-frame defer also avoids mutating the chain re-entrantly while a
-    /// match is still being processed.
+    /// Each Add carries an optional integer weight; per-cluster weights are summed and handed to
+    /// onResolve, so callers can scale the resulting effect (e.g. ignite blast size). Shared by
+    /// effects triggered many times in one destruction event: one burst per real location, never N
+    /// stacked on the same instant. The one-frame defer also avoids mutating the chain re-entrantly
+    /// while a match is still being processed.
     /// </summary>
     public class FrameCoalescer
     {
         private readonly MonoBehaviour owner;                    // runs the deferred coroutine
-        private readonly System.Action<Vector3, int, int> onResolve; // (clusterCentroid, memberCount, ignitePower)
+        private readonly System.Action<Vector3, int, int> onResolve; // (clusterCentroid, memberCount, totalWeight)
         private readonly float mergeRadius;                      // positions closer than this share a burst
         private readonly List<Vector3> pending = new List<Vector3>(8);
-        private readonly List<int> pendingIgnite = new List<int>(8); 
+        private readonly List<int> pendingWeights = new List<int>(8);
         private int batchFrame = -1;
 
         public FrameCoalescer(MonoBehaviour owner, float mergeRadius,
-                              System.Action<Vector3, int,int> onResolve)
+                              System.Action<Vector3, int, int> onResolve)
         {
             this.owner = owner;
             this.mergeRadius = mergeRadius;
             this.onResolve = onResolve;
         }
 
-        /// <summary>Queue a trigger position. The first call each frame schedules the resolve.</summary>
-        public void Add(Vector3 pos, int igniteStacks = 0)
+        /// <summary>Queue a trigger position (with an optional weight). The first call each frame schedules the resolve.</summary>
+        public void Add(Vector3 pos, int weight = 0)
         {
             pending.Add(pos);
-            pendingIgnite.Add(igniteStacks);
+            pendingWeights.Add(weight);
             if (Time.frameCount != batchFrame)
             {
                 batchFrame = Time.frameCount;
@@ -45,7 +46,7 @@ namespace YuumisProwl.Utilities
         }
 
         /// <summary>Drop any queued positions — call on synergy teardown.</summary>
-        public void Clear() { pending.Clear(); pendingIgnite.Clear(); }
+        public void Clear() { pending.Clear(); pendingWeights.Clear(); }
 
         private IEnumerator ResolveNextFrame()
         {
@@ -55,7 +56,7 @@ namespace YuumisProwl.Utilities
             // Greedy spatial clustering — merge positions within mergeRadius, keep far ones apart.
             var sums = new List<Vector3>(4);   // running position sum per cluster
             var counts = new List<int>(4);     // membership count per cluster
-            var ignitePowers = new List<int>(4); // ignite power SUMMED per cluster
+            var weights = new List<int>(4);    // total weight summed per cluster
             float r2 = mergeRadius * mergeRadius;
 
             for (int i = 0; i < pending.Count; i++)
@@ -67,15 +68,15 @@ namespace YuumisProwl.Utilities
                     Vector3 centroid = sums[c] / counts[c];
                     if ((centroid - p).sqrMagnitude <= r2) { hit = c; break; }
                 }
-                if (hit >= 0) { sums[hit] += p; counts[hit]++; ignitePowers[hit] += pendingIgnite[i]; }
-                else { sums.Add(p); counts.Add(1); ignitePowers.Add(pendingIgnite[i]); }
+                if (hit >= 0) { sums[hit] += p; counts[hit]++; weights[hit] += pendingWeights[i]; }
+                else { sums.Add(p); counts.Add(1); weights.Add(pendingWeights[i]); }
             }
 
             pending.Clear();
-            pendingIgnite.Clear();
+            pendingWeights.Clear();
 
             for (int c = 0; c < sums.Count; c++)
-                onResolve?.Invoke(sums[c] / counts[c], counts[c], ignitePowers[c]);
+                onResolve?.Invoke(sums[c] / counts[c], counts[c], weights[c]);
         }
     }
 }

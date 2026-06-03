@@ -94,7 +94,7 @@ namespace YuumisProwl.Player
 
         private Vector3 GetAimWorldPosition()
         {
-#if UNITY_EDITOR || UNITY_STANDALONE
+#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL
             Vector3 mousePos = Input.mousePosition;
             mousePos.z = Mathf.Abs(mainCamera.transform.position.z - transform.position.z);
             return mainCamera.ScreenToWorldPoint(mousePos);

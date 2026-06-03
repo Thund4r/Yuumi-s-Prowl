@@ -188,7 +188,7 @@ namespace YuumisProwl.Projectile
             Vector3 cursorTarget = targetPosition;
             bool homingOverride = false;
 
-            #if UNITY_EDITOR || UNITY_STANDALONE
+            #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL
             Vector3 mousePos = Input.mousePosition;
             mousePos.z = Mathf.Abs(mainCamera.transform.position.z - transform.position.z);
             cursorTarget = mainCamera.ScreenToWorldPoint(mousePos);
@@ -479,32 +479,14 @@ namespace YuumisProwl.Projectile
         /// </summary>
         private void ExecuteBombExplosion()
         {
-            Collider[] hits = Physics.OverlapSphere(transform.position, bombRadius);
+            int removed = ballChainManager != null
+                ? ballChainManager.RemoveBallsInRadius(transform.position, bombRadius)
+                : 0;
 
-            List<int> indicesToRemove = new List<int>();
-            foreach (var hit in hits)
-            {
-                if (hit.CompareTag("Ball"))
-                {
-                    Ball ball = hit.GetComponent<Ball>();
-                    if (ball != null && !indicesToRemove.Contains(ball.ChainIndex))
-                        indicesToRemove.Add(ball.ChainIndex);
-                }
-            }
+            Debug.Log($"Bomb exploded! Destroyed {removed} balls in radius {bombRadius}.");
 
-            // Remove highest indices first so earlier indices stay valid
-            indicesToRemove.Sort((a, b) => b.CompareTo(a));
-
-            foreach (int index in indicesToRemove)
-            {
-                if (ballChainManager != null)
-                    ballChainManager.RemoveBallAtIndex(index);
-            }
-
-            Debug.Log($"Bomb exploded! Destroyed {indicesToRemove.Count} balls in radius {bombRadius}.");
-
-            if (matchProcessor != null)
-                matchProcessor.ProcessPierceAftermath(indicesToRemove.Count);
+            if (removed > 0 && matchProcessor != null)
+                matchProcessor.ProcessPierceAftermath(removed);
 
             if (ownerSpawner != null)
                 ownerSpawner.ReturnProjectile(this);

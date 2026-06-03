@@ -64,7 +64,8 @@ namespace YuumisProwl.BallChain
         // Runtime properties
         private float pathProgress;
         private int chainIndex;
-        private Material ballMaterial;
+        private MaterialPropertyBlock ballPropertyBlock;
+        private static readonly int ColorPropertyId = Shader.PropertyToID("_Color");
         private BallPowerUpType powerUpType = BallPowerUpType.None;
         private float powerUpValue = 0f;
         private int frostStacks = 0;
@@ -98,13 +99,11 @@ namespace YuumisProwl.BallChain
             if (sphereCollider == null)
                 sphereCollider = GetComponent<SphereCollider>();
 
-            // Create instance material to avoid shared material modification
-            if (meshRenderer != null && meshRenderer.sharedMaterial != null)
-            {
-                ballMaterial = new Material(meshRenderer.sharedMaterial);
-                meshRenderer.material = ballMaterial;
-            }
-            else if (meshRenderer != null)
+            // All balls share one material; per-ball colour is supplied via a
+            // MaterialPropertyBlock (SetBallColor) so they can be GPU-instanced into a single
+            // draw call. Creating a per-ball material here would break that.
+            ballPropertyBlock = new MaterialPropertyBlock();
+            if (meshRenderer != null && meshRenderer.sharedMaterial == null)
             {
                 Debug.LogWarning($"Ball '{name}' MeshRenderer has no material assigned — assign one in the prefab's Inspector.", this);
             }
@@ -267,7 +266,7 @@ namespace YuumisProwl.BallChain
         /// </summary>
         public void FlashZap(float duration = 0.18f)
         {
-            if (ballMaterial == null || !gameObject.activeInHierarchy) return;
+            if (meshRenderer == null || !gameObject.activeInHierarchy) return;
             StartCoroutine(FlashZapRoutine(duration));
         }
 
@@ -282,14 +281,14 @@ namespace YuumisProwl.BallChain
             while (t < half)
             {
                 t += Time.deltaTime;
-                if (ballMaterial != null) ballMaterial.color = Color.Lerp(resting, Color.white, t / half);
+                SetBallColor(Color.Lerp(resting, Color.white, t / half));
                 yield return null;
             }
             t = 0f;
             while (t < half)
             {
                 t += Time.deltaTime;
-                if (ballMaterial != null) ballMaterial.color = Color.Lerp(Color.white, resting, t / half);
+                SetBallColor(Color.Lerp(Color.white, resting, t / half));
                 yield return null;
             }
             UpdateVisuals();
@@ -349,21 +348,31 @@ namespace YuumisProwl.BallChain
         /// </summary>
         private void UpdateVisuals()
         {
-            if (ballMaterial == null && meshRenderer != null)
-            {
-                ballMaterial = meshRenderer.material;
-            }
-
-            if (ballMaterial == null) return;
+            if (meshRenderer == null) return;
 
             if (powerUpType == BallPowerUpType.Hammer)
             {
                 // Golden color so the hammer ball is immediately distinct
-                ballMaterial.color = new Color(1f, 0.85f, 0.1f);
+                SetBallColor(new Color(1f, 0.85f, 0.1f));
                 return;
             }
 
-            ballMaterial.color = ApplyIgniteTint(BallColorUtils.ToUnityColor(ballColor));
+            SetBallColor(ApplyIgniteTint(BallColorUtils.ToUnityColor(ballColor)));
+        }
+
+        /// <summary>
+        /// Drives this ball's colour through a MaterialPropertyBlock instead of its own material
+        /// instance, so every ball keeps sharing one material and Unity can draw them all in a
+        /// single GPU-instanced draw call. Setting meshRenderer.material.color would give each
+        /// ball a unique material and break instancing.
+        /// </summary>
+        private void SetBallColor(Color color)
+        {
+            if (meshRenderer == null) return;
+            if (ballPropertyBlock == null) ballPropertyBlock = new MaterialPropertyBlock();
+            meshRenderer.GetPropertyBlock(ballPropertyBlock);
+            ballPropertyBlock.SetColor(ColorPropertyId, color);
+            meshRenderer.SetPropertyBlock(ballPropertyBlock);
         }
 
         /// <summary>Blends the base colour toward primedTint by ignite progress (full when primed).</summary>
@@ -492,18 +501,10 @@ namespace YuumisProwl.BallChain
                 meshRenderer = GetComponent<MeshRenderer>();
             if (sphereCollider == null)
                 sphereCollider = GetComponent<SphereCollider>();
-
-            UpdateVisuals();
         }
 
         private void OnDestroy()
         {
-            // Clean up instanced material
-            if (ballMaterial != null)
-            {
-                Destroy(ballMaterial);
-            }
-
             if (frostOverlayMaterials != null)
             {
                 for (int i = 0; i < frostOverlayMaterials.Length; i++)

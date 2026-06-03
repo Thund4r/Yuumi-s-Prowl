@@ -188,7 +188,7 @@ namespace YuumisProwl.Projectile
             Vector3 worldTarget = Vector3.zero;
             Camera cam = Camera.main;
 
-            #if UNITY_EDITOR || UNITY_STANDALONE
+            #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL
             shouldShoot = Input.GetMouseButtonDown(0);
             if (shouldShoot && cam != null)
             {

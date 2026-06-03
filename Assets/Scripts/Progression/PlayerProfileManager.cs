@@ -19,6 +19,13 @@ namespace YuumisProwl.Progression
 
         private string saveFilePath;
 
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // WebGL keeps persistentDataPath in an in-memory filesystem; this flushes it to the
+        // browser's IndexedDB so saves survive a page refresh. Implemented in SaveSync.jslib.
+        [System.Runtime.InteropServices.DllImport("__Internal")]
+        private static extern void SyncSaveFiles();
+#endif
+
         private void Awake()
         {
             if (instance != null && instance != this)
@@ -203,6 +210,10 @@ namespace YuumisProwl.Progression
 
                 string json = JsonUtility.ToJson(Profile, prettyPrint: true);
                 File.WriteAllText(instance.saveFilePath, json);
+#if UNITY_WEBGL && !UNITY_EDITOR
+                // Flush the write through to IndexedDB so it survives a page refresh.
+                SyncSaveFiles();
+#endif
                 Debug.Log($"PlayerProfileManager: saved profile to {instance.saveFilePath}");
             }
             catch (System.Exception e)
