@@ -22,7 +22,7 @@ namespace YuumisProwl.Managers
             matchProcessor.OnBallsDestroyed += HandleBallsDestroyed;
         }
 
-        public void SpawnBoss(Transform bossSpawnPoint)
+        public void SpawnBoss(Transform bossSpawnPoint, float healthMult = 1f)
         {
             if (bossSpawnPoint == null)
             {
@@ -30,6 +30,7 @@ namespace YuumisProwl.Managers
                 return;
             }
             currentBoss = Instantiate(bossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation, bossSpawnPoint);
+            currentBoss.SetHealthMultiplier(healthMult);
             currentBoss.OnDefeated += HandleBossDefeated;
         }
 

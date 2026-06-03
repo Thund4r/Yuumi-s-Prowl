@@ -49,7 +49,7 @@ namespace YuumisProwl.Managers
         /// used by RunManager to enforce the player's currently-unlocked colour count.
         /// Pass -1 (default) to use the LevelData value unchanged.
         /// </summary>
-        public void LoadMap(Map prefab, float ballSpeedMult = 1f, int colorCountCap = -1)
+        public void LoadMap(Map prefab, float ballSpeedMult = 1f, int colorCountCap = -1, float bossHealthMult = 1f)
         {
             if (prefab == null)
             {
@@ -58,10 +58,10 @@ namespace YuumisProwl.Managers
             }
 
             if (loadRoutine != null) StopCoroutine(loadRoutine);
-            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, colorCountCap));
+            loadRoutine = StartCoroutine(LoadMapRoutine(prefab, ballSpeedMult, colorCountCap, bossHealthMult));
         }
 
-        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, int colorCountCap)
+        private IEnumerator LoadMapRoutine(Map prefab, float ballSpeedMult, int colorCountCap, float bossHealthMult)
         {
             IsTransitioning = true;
 
@@ -102,7 +102,7 @@ namespace YuumisProwl.Managers
             }
 
             if (bossManager != null)
-                bossManager.SpawnBoss(currentMapInstance.BossSpawnPoint);
+                bossManager.SpawnBoss(currentMapInstance.BossSpawnPoint, bossHealthMult);
 
             if (gameManager != null)
                 gameManager.InitializeGame();

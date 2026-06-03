@@ -133,14 +133,15 @@ namespace YuumisProwl.BallChain
         private IEnumerator WaveSurge(float peakMultiplier, float duration)
         {
             float elapsed = 0f;
+            float OriSpeed = ballChainManager.GetSpeed();
             while (elapsed < duration)
             {
                 elapsed += Time.deltaTime;
                 float t = Mathf.Clamp01(elapsed / duration);
-                ballChainManager.SetChainSpeedMultiplier(Mathf.SmoothStep(peakMultiplier, 1f, t));
+                ballChainManager.SetSpeed(Mathf.SmoothStep(peakMultiplier, 1, t));
                 yield return null;
             }
-            ballChainManager.SetChainSpeedMultiplier(1f);
+            ballChainManager.SetSpeed(OriSpeed);
             surgeRoutine = null;
         }
 

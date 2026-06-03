@@ -989,6 +989,10 @@ namespace YuumisProwl.BallChain
         }
 
         public void SetSpeed(float speed) { ballSpeed = speed; }
+        public float GetSpeed()
+        {
+            return (ballSpeed);
+        }
         public void SetMoving(bool moving) { isMoving = moving; }
 
         public void UpdateBallPositionsPublic() { UpdateBallPositions(); }

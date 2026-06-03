@@ -31,6 +31,9 @@ namespace YuumisProwl.Progression
         [Tooltip("Multiplier applied to LevelData.ballSpeed at floor%. X=0 is the first floor, X=1 is the last. Empty curve = constant 1.0 (no scaling).")]
         public AnimationCurve ballSpeedCurve = AnimationCurve.Constant(0f, 1f, 1f);
 
+        [Tooltip("Multiplier applied to LevelData.bossHealth at floor%. X=0 is the first floor, X=1 is the last. Empty curve = constant 1.0 (no scaling).")]
+        public AnimationCurve bossHealthCurve = AnimationCurve.Constant(0f, 1f, 1f);
+
         [Header("Gold Rewards")]
         [Tooltip("Base gold awarded per gameplay floor cleared.")]
         [Min(0)] public int baseGoldPerFloor = 30;
@@ -118,6 +121,9 @@ namespace YuumisProwl.Progression
         [Tooltip("World-space radius of the mini-explosion a primed red leaves when destroyed. Tune well below explosion radius.")]
         [Min(0.1f)] public float igniteMiniRadius = 1f;
 
+        [Tooltip("World-space radius of the merge for coalescing ignite triggers into one explosion when multiple primed reds detonate close together. Also used for merging multiple red-match explosion triggers. Tune well below explosion radius to avoid excessive merging.")]
+        [Min(0.1f)] public float igniteMergeRadius = 0.5f;
+
         [Tooltip("Static stacks an arc must apply to a ball whose colour has no active synergy before it pops (baseline). Not upgradeable.")]
         [Min(1)] public int staticThreshold = 3;
 
@@ -132,6 +138,12 @@ namespace YuumisProwl.Progression
         {
             if (ballSpeedCurve == null || ballSpeedCurve.length == 0) return 1f;
             return ballSpeedCurve.Evaluate(Mathf.Clamp01(t));
+        }
+
+        public float SampleBossHealthMult(float t)
+        {
+            if (bossHealthCurve == null || bossHealthCurve.length == 0) return 1f;
+            return bossHealthCurve.Evaluate(Mathf.Clamp01(t));
         }
 
         /// <summary>

@@ -210,6 +210,7 @@ namespace YuumisProwl.Progression
 
                     float t = GetFloorProgress();
                     float ballSpeedMult = config.SampleBallSpeedMult(t);
+                    float bossHealthMult = config.SampleBossHealthMult(t);
 
                     // Subtract the player's ball-speed reduction (from meta upgrades).
                     float speedReduction = runtimeStats != null ? runtimeStats.BallSpeedReduction : 0f;
@@ -217,7 +218,7 @@ namespace YuumisProwl.Progression
 
                     int unlockedColors = PlayerProfileManager.GetUnlockedColorCount();
                     Debug.Log($"RunManager: loading floor {state.currentNodeIndex + 1}/{state.nodes.Length} (t={t:F2}) — ballSpeed×{ballSpeedMult:F2}, colours capped at {unlockedColors}");
-                    levelManager.LoadMap(node.mapPrefab, ballSpeedMult, unlockedColors);
+                    levelManager.LoadMap(node.mapPrefab, ballSpeedMult, unlockedColors, bossHealthMult);
                     break;
 
                 case RunNodeType.Shop:

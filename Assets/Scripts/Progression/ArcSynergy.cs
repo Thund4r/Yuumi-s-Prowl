@@ -68,7 +68,7 @@ namespace YuumisProwl.Progression
 
         private void Awake()
         {
-            float mergeRadius = config != null ? config.igniteMiniRadius : 1f;
+            float mergeRadius = config != null ? config.igniteMergeRadius : 1f;
             igniteCoalescer = new FrameCoalescer(this, mergeRadius, (center, count, weight) => ExplodeMini(center, weight));
         }
 

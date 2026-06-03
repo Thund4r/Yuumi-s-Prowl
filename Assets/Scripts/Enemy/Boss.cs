@@ -7,19 +7,17 @@ namespace YuumisProwl.Enemy
         [Header("References")]
         [SerializeField] private BossData bossData;
         private int Health;
+        private float HealthMultiplier = 1;
         public System.Action OnDefeated;
 
         private void Start()
         {
-            Health = bossData.maxHealth;
-            
+            Health = Mathf.RoundToInt(bossData.maxHealth * HealthMultiplier);
         }
 
         public void TakeDamage(int damage)
         {
             Health = Mathf.Max(0, Health - damage);
-            Debug.Log("Boss took " + damage + " damage, remaining health: " + Health);
-
             if (Health <= 0)
             {
                 OnDefeated?.Invoke();
@@ -29,6 +27,11 @@ namespace YuumisProwl.Enemy
         public void TakeWaveDamage()
         {
             TakeDamage(bossData.waveDamage);
+        }
+
+        public void SetHealthMultiplier(float multiplier)
+        {
+            HealthMultiplier = multiplier;
         }
 
     }
