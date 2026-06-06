@@ -415,8 +415,8 @@ namespace YuumisProwl.Projectile
                     {
                         int hammerIndex = hammer.ChainIndex;
 
-                        // Removing the hammer fires BallChainManager.OnHammerDestroyed,
-                        // which MatchProcessor handles (recoil + cascade aftermath).
+                        // Removing the hammer reports it via BallChainManager.OnBallsDestroyed
+                        // (wasHammer), which MatchProcessor handles (recoil + cascade aftermath).
                         ballChainManager.RemoveBallAtIndex(hammerIndex);
                         homingLock = null;
 

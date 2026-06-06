@@ -13,7 +13,7 @@ namespace YuumisProwl.Progression
     ///   3. At RunConfig.iceFreezeStackThreshold stacks, the ball is marked
     ///      frozen and its stack counter zeros out.
     ///   4. When a frozen ball is destroyed by any means, BallChainManager fires
-    ///      OnFrozenBallDestroyed and IceSynergy spawns an Icicle from that
+    ///      OnBallsDestroyed (wasFrozen) and IceSynergy spawns an Icicle from that
     ///      position. The icicle locks onto a random ball not currently being
     ///      targeted by another icicle and destroys it on contact.
     ///   5. Chain reactions: icicles can target frozen balls; destroying one
@@ -81,7 +81,7 @@ namespace YuumisProwl.Progression
             if (matchProcessor != null)
                 matchProcessor.OnMatchVisual += HandleMatchVisual;
             if (ballChainManager != null)
-                ballChainManager.OnFrozenBallDestroyed += HandleFrozenBallDestroyed;
+                ballChainManager.OnBallsDestroyed += HandleBallsDestroyed;
             if (gameManager != null)
             {
                 gameManager.OnGameWon += HandleRoundEnded;
@@ -95,7 +95,7 @@ namespace YuumisProwl.Progression
             if (matchProcessor != null)
                 matchProcessor.OnMatchVisual -= HandleMatchVisual;
             if (ballChainManager != null)
-                ballChainManager.OnFrozenBallDestroyed -= HandleFrozenBallDestroyed;
+                ballChainManager.OnBallsDestroyed -= HandleBallsDestroyed;
 
             // Clear active state so a re-enable starts clean.
             TearDownAllPatches();
@@ -423,6 +423,14 @@ namespace YuumisProwl.Progression
         // ============================================================
         // Frozen ball destroyed → spawn icicle
         // ============================================================
+
+        /// <summary>Unified destruction hook — react to the frozen balls in the batch.</summary>
+        private void HandleBallsDestroyed(System.Collections.Generic.List<BallDestructionInfo> balls)
+        {
+            for (int i = 0; i < balls.Count; i++)
+                if (balls[i].wasFrozen)
+                    HandleFrozenBallDestroyed(balls[i].position, balls[i].frozenPower);
+        }
 
         private void HandleFrozenBallDestroyed(Vector3 worldPos, int power)
         {

@@ -7,8 +7,8 @@ namespace YuumisProwl.Progression
     /// <summary>
     /// Blue Ice-Patches synergy projectile. Spawned by IceSynergy when a frozen ball is
     /// destroyed; locks onto a target Ball and destroys it on arrival. Chain reactions happen
-    /// naturally: if the target was itself frozen, its destruction fires OnFrozenBallDestroyed
-    /// which spawns another icicle.
+    /// naturally: if the target was itself frozen, its destruction is reported via
+    /// BallChainManager.OnBallsDestroyed (wasFrozen), which spawns another icicle.
     ///
     /// Flight is the shared HomingBolt curve — it kicks out perpendicular to the spawn→target
     /// line, then curves in steeply and hits. Lightweight by design: does not pierce, insert, or

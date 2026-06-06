@@ -28,8 +28,8 @@ namespace YuumisProwl.BallChain
         public int freezeStacks;
         /// <summary>
         /// True if the ball is currently frozen. Frozen balls still move with the chain,
-        /// but on destruction (by any means) BallChainManager fires OnFrozenBallDestroyed
-        /// so IceSynergy can spawn an icicle.
+        /// but on destruction (by any means) it's reported via BallChainManager.OnBallsDestroyed
+        /// (wasFrozen) so IceSynergy can spawn an icicle.
         /// </summary>
         public bool isFrozen;
         /// <summary>
@@ -39,8 +39,8 @@ namespace YuumisProwl.BallChain
         public int igniteStacks;
         /// <summary>
         /// True once the ball is primed (ignite threshold reached). A primed ball leaves a
-        /// mini-explosion when destroyed by any means — BallChainManager fires
-        /// OnIgnitedBallDestroyed so ArcSynergy can detonate it.
+        /// mini-explosion when destroyed by any means — it's reported via
+        /// BallChainManager.OnBallsDestroyed (wasPrimed) so ArcSynergy can detonate it.
         /// </summary>
         public bool primed;
         /// <summary>

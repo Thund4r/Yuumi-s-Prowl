@@ -16,6 +16,15 @@ namespace YuumisProwl.BallChain
         public BallColor color;
         public int damageValue;
         public EnemyType enemyType;
+        // Specialized synergy/power-up payloads — set only when the matching flag is true, so each
+        // reacting system filters the list for what it cares about.
+        public bool wasFrozen;
+        public int frozenPower;
+        public bool wasPrimed;
+        public int ignitePower;
+        public bool wasHammer;
+        public float hammerRecoil;
+        public int chainIndex;   // pre-removal global index (the hammer recoil aftermath needs it)
     }
 
     /// <summary>
@@ -70,27 +79,6 @@ namespace YuumisProwl.BallChain
         ///   segment's lead ball landed. Useful for detecting cascade matches at the seam.
         /// </summary>
         public System.Action<int, int> OnSegmentsMerged;
-        /// <summary>
-        /// Fired whenever a Hammer power-up ball is removed from the chain — by any means
-        /// (projectile, Pierce, Bomb, or a match). Parameters:
-        ///   globalChainIndex — the index the hammer occupied (captured pre-removal).
-        ///   recoilDistance — the hammer's recoil distance (PowerUpValue).
-        /// MatchProcessor listens to this to run the hammer recoil + cascade aftermath.
-        /// </summary>
-        public System.Action<int, float> OnHammerDestroyed;
-        /// <summary>
-        /// Fired whenever a *frozen* ball is removed from the chain — by any means
-        /// (match, projectile, Pierce, Bomb, red explosion, or another icicle). Param is
-        /// the ball's world position at removal time. IceSynergy listens and spawns an
-        /// icicle from this position, enabling chain reactions through frozen balls.
-        /// </summary>
-        public System.Action<Vector3, int> OnFrozenBallDestroyed;
-        /// <summary>
-        /// Fired whenever a *primed* ball (Orange Conductor ignite) is removed from the chain
-        /// by any means. Param is the ball's world position at removal time. ArcSynergy listens
-        /// and detonates a mini-explosion there.
-        /// </summary>
-        public System.Action<Vector3, int> OnIgnitedBallDestroyed;
         /// <summary>
         /// THE unified destruction hook. Fired once per removal batch from RemoveBalls /
         /// RemoveBallAtIndex — i.e. for *every* ball that leaves the chain by *any* means (match,
@@ -575,71 +563,13 @@ namespace YuumisProwl.BallChain
         {
             if (nodesToRemove == null || nodesToRemove.Count == 0) return;
 
-            // Capture hammer info before the balls are recycled. Only one hammer can
-            // exist at a time, so the first match in the batch is enough.
-            bool hammerRemoved = false;
-            int hammerIndex = -1;
-            float hammerRecoil = 0f;
-            
-            foreach (var node in nodesToRemove)
-            {
-                if (node.ball != null && node.ball.PowerUpType == BallPowerUpType.Hammer)
-                {
-                    hammerRemoved = true;
-                    hammerIndex = GlobalIndexOf(node);
-                    hammerRecoil = node.ball.PowerUpValue;
-                    break;
-                }
-            }
-
-            // Capture frozen-ball positions before pooling so IceSynergy can spawn
-            // icicles from where each frozen ball was. Chain reactions ride this hook.
-            List<Vector3> frozenPositions = null;
-            List<int> frozenPowers = null;
-            foreach (var node in nodesToRemove)
-            {
-                if (node.isFrozen && node.ball != null)
-                {
-                    if (frozenPositions == null)
-                    {
-                        frozenPositions = new List<Vector3>(nodesToRemove.Count);
-                        frozenPowers = new List<int>(nodesToRemove.Count);
-                    }
-                    frozenPositions.Add(node.ball.transform.position);
-                    frozenPowers.Add(Mathf.Max(1, node.frozenPower));
-                }
-            }
-
-            // Capture primed-ball positions before pooling so ArcSynergy can detonate a
-            // mini-explosion from where each primed ball was (Orange Conductor ignite).
-            List<Vector3> primedPositions = null;
-            List<int> primedPowers = null;
-            foreach (var node in nodesToRemove)
-            {
-                if (node.primed && node.ball != null)
-                {
-                    if (primedPositions == null)
-                    {
-                        primedPositions = new List<Vector3>(nodesToRemove.Count);
-                        primedPowers = new List<int>(nodesToRemove.Count);
-                    }
-                    primedPositions.Add(node.ball.transform.position);
-                    primedPowers.Add(Mathf.Max(1, node.ignitePower));
-                }
-            }
-
-            // Capture every destroyed ball before pooling for the unified destruction hook.
+            // Capture every destroyed ball before pooling — one pass that fills the unified
+            // destruction record (general fields + the specialized synergy/power-up payloads).
             destroyedBuffer.Clear();
             foreach (var node in nodesToRemove)
             {
                 if (node.ball == null) continue;
-                destroyedBuffer.Add(new BallDestructionInfo
-                {
-                    position = node.ball.transform.position,
-                    color = node.ball.BallColor,
-                    damageValue = node.damageValue,
-                    enemyType = node.enemyType,
-                });
+                destroyedBuffer.Add(CaptureDestruction(node));
             }
 
             // Group removals by segment
@@ -674,21 +604,6 @@ namespace YuumisProwl.BallChain
             PruneEmptySegments();
             UpdateChainIndices();
 
-            if (hammerRemoved)
-                OnHammerDestroyed?.Invoke(hammerIndex, hammerRecoil);
-
-            if (frozenPositions != null)
-            {
-                for (int i = 0; i < frozenPositions.Count; i++)
-                    OnFrozenBallDestroyed?.Invoke(frozenPositions[i], frozenPowers[i]);
-            }
-
-            if (primedPositions != null)
-            {
-                for (int i = 0; i < primedPositions.Count; i++)
-                    OnIgnitedBallDestroyed?.Invoke(primedPositions[i], primedPowers[i]);
-            }
-
             if (destroyedBuffer.Count > 0)
                 OnBallsDestroyed?.Invoke(destroyedBuffer);
         }
@@ -704,32 +619,10 @@ namespace YuumisProwl.BallChain
             ChainSegment seg = GetSegmentById(node.segmentId);
             if (seg == null) return;
 
-            // Capture hammer info before the ball is recycled.
-            bool hammerRemoved = node.ball != null && node.ball.PowerUpType == BallPowerUpType.Hammer;
-            float hammerRecoil = hammerRemoved ? node.ball.PowerUpValue : 0f;
-
-            // Capture frozen position before pool return so IceSynergy can spawn an icicle.
-            bool wasFrozen = node.isFrozen && node.ball != null;
-            Vector3 frozenPos = wasFrozen ? node.ball.transform.position : Vector3.zero;
-            int frozenPower = wasFrozen ? Mathf.Max(1, node.frozenPower) : 0;
-
-            // Capture primed position before pool return so ArcSynergy can detonate it.
-            bool wasPrimed = node.primed && node.ball != null;
-            Vector3 primedPos = wasPrimed ? node.ball.transform.position : Vector3.zero;
-            int primedPower = wasPrimed ? Mathf.Max(1, node.ignitePower) : 0;
-
-            // Capture this ball's full destruction info before pool return for the unified hook.
+            // Capture this ball's full destruction record before pool return for the unified hook.
             destroyedBuffer.Clear();
             if (node.ball != null)
-            {
-                destroyedBuffer.Add(new BallDestructionInfo
-                {
-                    position = node.ball.transform.position,
-                    color = node.ball.BallColor,
-                    damageValue = node.damageValue,
-                    enemyType = node.enemyType,
-                });
-            }
+                destroyedBuffer.Add(CaptureDestruction(node));
 
             if (node.ball != null)
             {
@@ -742,17 +635,31 @@ namespace YuumisProwl.BallChain
             PruneEmptySegments();
             UpdateChainIndices();
 
-            if (hammerRemoved)
-                OnHammerDestroyed?.Invoke(globalChainIndex, hammerRecoil);
-
-            if (wasFrozen)
-                OnFrozenBallDestroyed?.Invoke(frozenPos, frozenPower);
-
-            if (wasPrimed)
-                OnIgnitedBallDestroyed?.Invoke(primedPos, primedPower);
-
             if (destroyedBuffer.Count > 0)
                 OnBallsDestroyed?.Invoke(destroyedBuffer);
+        }
+
+        /// <summary>
+        /// Builds the destruction record for a node, captured *before* it's recycled (positions and
+        /// chainIndex are still valid). One place that knows how to read all the per-ball payloads.
+        /// </summary>
+        private BallDestructionInfo CaptureDestruction(BallNode node)
+        {
+            bool isHammer = node.ball.PowerUpType == BallPowerUpType.Hammer;
+            return new BallDestructionInfo
+            {
+                position = node.ball.transform.position,
+                color = node.ball.BallColor,
+                damageValue = node.damageValue,
+                enemyType = node.enemyType,
+                wasFrozen = node.isFrozen,
+                frozenPower = Mathf.Max(1, node.frozenPower),
+                wasPrimed = node.primed,
+                ignitePower = Mathf.Max(1, node.ignitePower),
+                wasHammer = isHammer,
+                hammerRecoil = isHammer ? node.ball.PowerUpValue : 0f,
+                chainIndex = node.chainIndex,
+            };
         }
 
         /// <summary>

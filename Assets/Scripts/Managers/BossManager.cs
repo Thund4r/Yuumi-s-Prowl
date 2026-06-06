@@ -124,13 +124,18 @@ namespace YuumisProwl.Managers
             }
         }
 
-        private void SpawnBolt(Vector3 origin, float dmg)
+        // Standard damage bolt — lands, deals its damage, recycles (boltArrivedCb).
+        private void SpawnBolt(Vector3 origin, float dmg) => SpawnBolt(origin, dmg, boltArrivedCb);
+
+        // Spawns a bolt with a custom arrival callback (e.g. the wave bolt, which also gates the
+        // next-wave spawn on arrival). Same spawn mechanics; only the on-arrive behaviour differs.
+        private void SpawnBolt(Vector3 origin, float dmg, System.Action<BossDamageBolt, float> onArrive)
         {
             if (currentBoss == null) return;
             BossDamageBolt bolt = AcquireBolt();
             activeBolts.Add(bolt);
             bolt.Launch(origin, currentBoss.transform, dmg,
-                damageBoltSpeed, damageBoltArrivalDistance, boltArrivedCb, boltLostCb);
+                damageBoltSpeed, damageBoltArrivalDistance, onArrive, boltLostCb);
         }
 
         private void BoltArrived(BossDamageBolt bolt, float dmg)
@@ -253,16 +258,13 @@ namespace YuumisProwl.Managers
             }
 
             // The wave chunk has no ball position — launch it from the fallback origin, or from
-            // just below the boss so it visibly rises into it when no fallback is set.
-            Vector3 origin = fallbackDamageOrigin != null
+            // just below the boss so it visibly rises into it when no fallback was set.
+            Vector3 origin = fallbackDamageOrigin != Vector3.zero
                 ? fallbackDamageOrigin
                 : currentBoss.transform.position + Vector3.down * 4f;
 
-            BossDamageBolt bolt = AcquireBolt();
-            activeBolts.Add(bolt);
-            bolt.Launch(origin, currentBoss.transform, waveDamage,
-                damageBoltSpeed, damageBoltArrivalDistance,
-                (b, dmg) => WaveBoltArrived(b, dmg, onBossSurvived), boltLostCb);
+            // Reuses the shared spawn path; only the arrival differs (it gates the next wave).
+            SpawnBolt(origin, waveDamage, (b, dmg) => WaveBoltArrived(b, dmg, onBossSurvived));
         }
 
         private void WaveBoltArrived(BossDamageBolt bolt, float dmg, System.Action onBossSurvived)

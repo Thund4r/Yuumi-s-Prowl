@@ -15,7 +15,7 @@ namespace YuumisProwl.Progression
     ///      ball to the match; later hops pick a random ball within arcHopChainRange chain
     ///      positions (front or back) of the current ball.
     ///   3. A red ball that reaches the ignite threshold becomes primed; a primed ball leaves a
-    ///      mini-explosion when destroyed (OnIgnitedBallDestroyed → coalesced ExplodeMini).
+    ///      mini-explosion when destroyed (OnBallsDestroyed wasPrimed → coalesced ExplodeMini).
     ///   4. A ball that reaches the static threshold pops (weak single removal).
     ///
     /// Orange is a pure catalyst — it never fires another colour's gated payoff, only charges the
@@ -77,7 +77,7 @@ namespace YuumisProwl.Progression
             if (matchProcessor != null)
                 matchProcessor.OnMatchVisual += HandleMatchVisual;
             if (ballChainManager != null)
-                ballChainManager.OnIgnitedBallDestroyed += HandleIgnitedBallDestroyed;
+                ballChainManager.OnBallsDestroyed += HandleBallsDestroyed;
         }
 
         private void OnDisable()
@@ -85,7 +85,7 @@ namespace YuumisProwl.Progression
             if (matchProcessor != null)
                 matchProcessor.OnMatchVisual -= HandleMatchVisual;
             if (ballChainManager != null)
-                ballChainManager.OnIgnitedBallDestroyed -= HandleIgnitedBallDestroyed;
+                ballChainManager.OnBallsDestroyed -= HandleBallsDestroyed;
 
             igniteCoalescer?.Clear();
             for (int i = 0; i < allLines.Count; i++)
@@ -333,6 +333,14 @@ namespace YuumisProwl.Progression
         // ============================================================
         // Ignite mini-explosion (primed red destroyed)
         // ============================================================
+
+        /// <summary>Unified destruction hook — react to the primed balls in the batch.</summary>
+        private void HandleBallsDestroyed(System.Collections.Generic.List<BallDestructionInfo> balls)
+        {
+            for (int i = 0; i < balls.Count; i++)
+                if (balls[i].wasPrimed)
+                    HandleIgnitedBallDestroyed(balls[i].position, balls[i].ignitePower);
+        }
 
         private void HandleIgnitedBallDestroyed(Vector3 worldPos, int ignitePower)
         {

@@ -77,7 +77,7 @@ namespace YuumisProwl.BallChain
 
             ballChainManager.OnBallInserted += OnBallInserted;
             ballChainManager.OnSegmentsMerged += OnSegmentsMergedHandler;
-            ballChainManager.OnHammerDestroyed += HandleHammerDestroyed;
+            ballChainManager.OnBallsDestroyed += HandleBallsDestroyed;
         }
 
         private void OnDestroy()
@@ -86,17 +86,25 @@ namespace YuumisProwl.BallChain
             {
                 ballChainManager.OnBallInserted -= OnBallInserted;
                 ballChainManager.OnSegmentsMerged -= OnSegmentsMergedHandler;
-                ballChainManager.OnHammerDestroyed -= HandleHammerDestroyed;
+                ballChainManager.OnBallsDestroyed -= HandleBallsDestroyed;
             }
         }
 
         /// <summary>
-        /// Runs the hammer recoil + cascade aftermath whenever a Hammer ball is destroyed,
-        /// regardless of what destroyed it (projectile, Pierce, Bomb, or a match).
+        /// Unified destruction hook — runs the hammer recoil + cascade aftermath whenever a Hammer
+        /// ball is in the destroyed batch, regardless of what destroyed it (projectile, Pierce, Bomb,
+        /// or a match). Only one hammer can exist at a time, so the first match in the batch suffices.
         /// </summary>
-        private void HandleHammerDestroyed(int hammerChainIndex, float recoilDistance)
+        private void HandleBallsDestroyed(List<BallDestructionInfo> balls)
         {
-            ProcessHammerAftermath(hammerChainIndex, recoilDistance);
+            for (int i = 0; i < balls.Count; i++)
+            {
+                if (balls[i].wasHammer)
+                {
+                    ProcessHammerAftermath(balls[i].chainIndex, balls[i].hammerRecoil);
+                    break;
+                }
+            }
         }
 
         // --------------------------------------------------------------
