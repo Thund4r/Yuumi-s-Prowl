@@ -6,6 +6,8 @@ namespace YuumisProwl.Enemy
     {
         [Header("References")]
         [SerializeField] private BossData bossData;
+        [SerializeField] public Material bossMaterial;
+        [SerializeField] public Material wardenBarrierMaterial;
         public BossData Data => bossData;
         private float Health;
         private float MaxHealth;

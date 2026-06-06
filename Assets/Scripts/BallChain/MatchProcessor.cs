@@ -65,14 +65,6 @@ namespace YuumisProwl.BallChain
         /// (0 = initial match in the sequence, 1+ = cascade). Gated by enableDestructionEffects.
         /// </summary>
         public System.Action<List<Vector3>, BallColor, int> OnMatchVisual;
-        /// <summary>
-        /// Fired immediately before RemoveBalls (like OnMatchVisual) but NOT gated by
-        /// enableDestructionEffects — carries the per-ball world positions and their per-ball
-        /// damageValue, aligned by index. BossManager uses it to launch one damage bolt per ball
-        /// carrying that ball's own damage. The matching OnBallsDestroyed (post-removal) is the
-        /// trigger that actually fires the bolts, so the Warden shield is evaluated after removal.
-        /// </summary>
-        public System.Action<List<Vector3>, List<int>> OnMatchBallsDamaged;
 
         private void Start()
         {
@@ -640,22 +632,16 @@ namespace YuumisProwl.BallChain
 
         private void FireMatchVisual(List<BallNode> matched, BallColor color, int cascadeIndex)
         {
-            bool wantDamage = OnMatchBallsDamaged != null;                       // boss damage — not gated by effects
-            bool wantVisual = enableDestructionEffects && OnMatchVisual != null; // particles/combo — gated
-            if (!wantDamage && !wantVisual) return;
+            if (!enableDestructionEffects || OnMatchVisual == null) return;
 
             var positions = new List<Vector3>(matched.Count);
-            List<int> damages = wantDamage ? new List<int>(matched.Count) : null;
             for (int i = 0; i < matched.Count; i++)
             {
-                if (matched[i].ball == null) continue;
-                positions.Add(matched[i].ball.transform.position);
-                if (damages != null) damages.Add(matched[i].damageValue);
+                if (matched[i].ball != null)
+                    positions.Add(matched[i].ball.transform.position);
             }
-            if (positions.Count == 0) return;
-
-            if (wantDamage) OnMatchBallsDamaged.Invoke(positions, damages);
-            if (wantVisual) OnMatchVisual.Invoke(positions, color, cascadeIndex);
+            if (positions.Count > 0)
+                OnMatchVisual.Invoke(positions, color, cascadeIndex);
         }
 
         private ChainSegment FindSegmentById(int id)
@@ -669,7 +655,7 @@ namespace YuumisProwl.BallChain
         /// <summary>
         /// A colour match adjacent to a Stone enemy cracks it. Returns the matched list expanded
         /// to include any Stone bordering the matched run within its segment (so the same
-        /// RemoveBalls call destroys them — and fires OnEnemyDestroyed for the clear-bonus).
+        /// RemoveBalls call destroys them — and reports them via OnBallsDestroyed for the clear-bonus).
         /// Returns the original list unchanged when no Stone borders the run. AoE removals already
         /// destroy Stones for free (they're plain balls to OverlapSphere), so only matches need this.
         /// </summary>

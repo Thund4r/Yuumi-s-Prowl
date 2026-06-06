@@ -108,6 +108,7 @@ namespace YuumisProwl.Managers
 
             if (bossManager != null)
                 bossManager.SpawnBoss(currentMapInstance.BossSpawnPoint, bossHealthMult);
+                bossManager.setFallbackDamageOrigin(currentMapInstance.PathController.GetPointOnPath(0f));
 
             if (gameManager != null)
                 gameManager.InitializeGame();

@@ -10,22 +10,23 @@ namespace YuumisProwl.Managers
     public class BossManager : MonoBehaviour
     {
         [Header("References")]
-        [SerializeField] private MatchProcessor matchProcessor;
         [SerializeField] private BallChainManager ballChainManager;
         [SerializeField] private Boss bossPrefab;
+        
 
         [Header("Damage Bolts")]
         [Tooltip("If true, ball-clear and enemy-clear damage flies to the boss as a HomingBolt and only lands on arrival. If false, damage is applied instantly.")]
         [SerializeField] private bool useDamageBolts = true;
         [Tooltip("Prefab for the boss-damage bolt (must have a BossDamageBolt component). If null, a red placeholder is created at runtime.")]
         [SerializeField] private BossDamageBolt damageBoltPrefab;
-        [Tooltip("Fallback origin for damage that has no destruction position (e.g. AoE removals). If null, that damage is applied instantly with no bolt.")]
-        [SerializeField] private Transform fallbackDamageOrigin;
+        [Tooltip("Origin for the per-wave-clear damage chunk (the only damage with no ball position). If null, the wave chunk launches from just below the boss.")]
+        [SerializeField] private Vector3 fallbackDamageOrigin;
         [SerializeField, Min(0.1f)] private float damageBoltSpeed = 14f;
         [SerializeField, Min(0.05f)] private float damageBoltArrivalDistance = 0.5f;
         [SerializeField, Min(1)] private int initialBoltPoolSize = 16;
 
         private Boss currentBoss;
+        private Coroutine damageFlashRoutine;
         public System.Action OnBossDefeated;
 
         /// <summary>The live boss's authoring data (enemy spec, warden shield) — null between floors.</summary>
@@ -39,14 +40,6 @@ namespace YuumisProwl.Managers
         private readonly Queue<BossDamageBolt> boltPool = new Queue<BossDamageBolt>(16);
         private readonly List<BossDamageBolt> activeBolts = new List<BossDamageBolt>(16);
 
-        // Per-ball positions + damages captured from OnMatchBallsDamaged so each cleared ball fires
-        // its own bolt from where it died, carrying its own damage. That event fires immediately
-        // before the matching OnBallsDestroyed, so the flag is reliably fresh for match damage and
-        // stale (→ fallback) for AoE removals, which fire OnBallsDestroyed with no preceding event.
-        private readonly List<Vector3> lastMatchPositions = new List<Vector3>(8);
-        private readonly List<int> lastMatchDamages = new List<int>(8);
-        private bool hasFreshPositions;
-
         // Cached delegates so per-ball bolt launches don't allocate a delegate each time.
         private System.Action<BossDamageBolt, float> boltArrivedCb;
         private System.Action<BossDamageBolt> boltLostCb;
@@ -58,14 +51,11 @@ namespace YuumisProwl.Managers
                 Debug.LogError("BossManager: Boss prefab not assigned!");
                 return;
             }
-            if (matchProcessor != null)
-            {
-                matchProcessor.OnBallsDestroyed += HandleBallsDestroyed;
-                matchProcessor.OnMatchBallsDamaged += HandleMatchBallsDamaged;
-            }
+            // Single hook: every destroyed ball (match, pierce, bomb, explosion, icicle, hammer)
+            // arrives here via BallChainManager's unified destruction event.
             if (ballChainManager != null)
             {
-                ballChainManager.OnEnemyDestroyed += HandleEnemyDestroyed;
+                ballChainManager.OnBallsDestroyed += HandleBallsDestroyed;
             }
 
             boltArrivedCb = BoltArrived;
@@ -77,15 +67,16 @@ namespace YuumisProwl.Managers
 
         private void OnDestroy()
         {
-            if (matchProcessor != null)
-            {
-                matchProcessor.OnBallsDestroyed -= HandleBallsDestroyed;
-                matchProcessor.OnMatchBallsDamaged -= HandleMatchBallsDamaged;
-            }
             if (ballChainManager != null)
             {
-                ballChainManager.OnEnemyDestroyed -= HandleEnemyDestroyed;
+                ballChainManager.OnBallsDestroyed -= HandleBallsDestroyed;
             }
+        }
+
+
+        public void setFallbackDamageOrigin(Vector3 origin)
+        {
+            fallbackDamageOrigin = origin;
         }
 
         public void SpawnBoss(Transform bossSpawnPoint, float healthMult = 1f)
@@ -97,96 +88,40 @@ namespace YuumisProwl.Managers
             }
             // Any bolts still chasing the previous floor's boss are stale — recycle them.
             ReleaseAllBolts();
-            hasFreshPositions = false;
 
             currentBoss = Instantiate(bossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation, bossSpawnPoint);
             currentBoss.SetHealthMultiplier(healthMult);
             currentBoss.OnDefeated += HandleBossDefeated;
         }
 
-        private void HandleMatchBallsDamaged(List<Vector3> positions, List<int> damages)
+        /// <summary>
+        /// Every ball that leaves the chain — by any means — lands here. Each fires one damage bolt
+        /// from its own position carrying its own damageValue (× the Warden shield) plus, for enemy
+        /// balls, the per-type clear-bonus. The shield is evaluated post-removal, so the hit that
+        /// kills the last Warden lands at full.
+        /// </summary>
+        private void HandleBallsDestroyed(List<BallDestructionInfo> balls)
         {
-            if (positions == null || positions.Count == 0) return;
-            lastMatchPositions.Clear();
-            lastMatchPositions.AddRange(positions);
-            lastMatchDamages.Clear();
-            if (damages != null) lastMatchDamages.AddRange(damages);
-            hasFreshPositions = true;
-        }
+            if (currentBoss == null || balls == null || balls.Count == 0) return;
 
-        public void HandleBallsDestroyed(int count, BallColor color)
-        {
-            if (currentBoss == null) return;
-
-            bool haveBallData = hasFreshPositions
-                && lastMatchPositions.Count == count
-                && lastMatchDamages.Count == count;
-            hasFreshPositions = false;
-
-            // Warden shield (evaluated post-removal, so the hit that kills the last Warden is full).
-            // Applied as a per-ball float factor — no integer rounding, so equal-damage balls stay
-            // equal-sized and there's no leftover-distribution artifact.
-            float shieldFactor = 1f;
             BossData data = currentBoss.Data;
+            float shieldFactor = 1f;
             if (data != null && data.wardenDamageReduction > 0f && AnyWardenAlive())
                 shieldFactor = 1f - data.wardenDamageReduction;
 
-            if (shieldFactor <= 0f) return; // fully shielded — no damage, no bolts
-
-            if (useDamageBolts && haveBallData)
+            for (int i = 0; i < balls.Count; i++)
             {
-                // One bolt per cleared ball, each carrying its own damageValue × shield.
-                for (int i = 0; i < lastMatchPositions.Count; i++)
-                {
-                    float dmg = lastMatchDamages[i] * shieldFactor;
-                    if (dmg > 0f) SpawnBolt(lastMatchPositions[i], dmg);
-                }
+                BallDestructionInfo b = balls[i];
+                // Base ball damage is shielded; the enemy clear-bonus rides the same bolt unshielded
+                // (it's the reward for clearing the enemy, not generic ball-clear damage).
+                float dmg = b.damageValue * shieldFactor;
+                if (b.enemyType != EnemyType.None && data != null)
+                    dmg += data.GetClearBonus(b.enemyType);
+
+                if (dmg <= 0f) continue;
+                if (useDamageBolts) SpawnBolt(b.position, dmg);
+                else currentBoss.TakeDamage(dmg);
             }
-            else
-            {
-                // AoE / positionless removal (no per-ball data): a single bolt from the fallback.
-                DealBossDamage(count * shieldFactor, null);
-            }
-        }
-
-        /// <summary>
-        /// An enemy disruptor was cleared — deal its per-type clear-bonus to the boss, on top of
-        /// any colour-match damage that already landed for it.
-        /// </summary>
-        private void HandleEnemyDestroyed(EnemyType type, Vector3 worldPos)
-        {
-            if (currentBoss == null || currentBoss.Data == null) return;
-            int bonus = currentBoss.Data.GetClearBonus(type);
-            DealBossDamage(bonus, worldPos);
-        }
-
-        /// <summary>
-        /// Applies `amount` damage to the boss. When damage bolts are enabled and an origin is
-        /// available, the damage flies there as a HomingBolt and only lands on arrival (the boss is
-        /// defeated event-driven via Boss.OnDefeated when the lethal bolt connects). Otherwise it's
-        /// applied instantly.
-        /// </summary>
-        private void DealBossDamage(float amount, Vector3? origin)
-        {
-            if (currentBoss == null || amount <= 0f) return;
-
-            if (!useDamageBolts)
-            {
-                currentBoss.TakeDamage(amount);
-                return;
-            }
-
-            Vector3? launchFrom = origin
-                ?? (fallbackDamageOrigin != null ? fallbackDamageOrigin.position : (Vector3?)null);
-
-            if (!launchFrom.HasValue)
-            {
-                // No position to launch from — apply instantly rather than drop the damage.
-                currentBoss.TakeDamage(amount);
-                return;
-            }
-
-            SpawnBolt(launchFrom.Value, amount);
         }
 
         private void SpawnBolt(Vector3 origin, float dmg)
@@ -203,7 +138,78 @@ namespace YuumisProwl.Managers
             // The boss may already be gone (an earlier bolt was lethal) — then drop the damage.
             if (currentBoss != null)
                 currentBoss.TakeDamage(dmg);
+            if (damageFlashRoutine == null) damageFlashRoutine = StartCoroutine(BossDamageRoutine(0.3f));;
             ReleaseBolt(bolt);
+        }
+
+        private System.Collections.IEnumerator BossDamageRoutine(float duration)
+        {
+            float half = Mathf.Max(0.01f, duration * 0.5f);
+
+            Color bossColor = currentBoss.bossMaterial.color;
+            float originalAlpha = bossColor.a;
+            Color wardenColor = currentBoss.wardenBarrierMaterial.color;
+            float targetAlpha = 0.6f; // How transparent the boss becomes
+            float alpha;
+            float t = 0f;
+            if (AnyWardenAlive())
+            {
+                while (t < half)
+                {
+                    t += Time.deltaTime;
+                    alpha = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
+                    bossColor.a = alpha;
+                    currentBoss.bossMaterial.color = bossColor;
+                    wardenColor.a = 1-alpha;
+                    currentBoss.wardenBarrierMaterial.color = wardenColor;
+                    
+
+                    yield return null;
+                }
+
+                t = 0f;
+                while (t < half)
+                {
+                    t += Time.deltaTime;
+                    alpha = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
+                    bossColor.a = alpha;
+                    currentBoss.bossMaterial.color = bossColor;
+                    wardenColor.a = 1-alpha;
+                    currentBoss.wardenBarrierMaterial.color = wardenColor;
+
+                    yield return null;
+                }
+            }
+            else
+            {
+                while (t < half)
+                {
+                    t += Time.deltaTime;
+                    
+                    bossColor.a = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
+                    currentBoss.bossMaterial.color = bossColor;
+
+                    yield return null;
+                }
+
+                t = 0f;
+                while (t < half)
+                {
+                    t += Time.deltaTime;
+
+                    bossColor.a = Mathf.Lerp(targetAlpha, originalAlpha, t / half);
+                    currentBoss.bossMaterial.color = bossColor;
+
+                    yield return null;
+                }
+            }
+            
+
+            bossColor.a = originalAlpha;
+            wardenColor.a = 0f;
+            currentBoss.bossMaterial.color = bossColor;
+            currentBoss.wardenBarrierMaterial.color = wardenColor;
+            damageFlashRoutine = null;
         }
 
         private void BoltLost(BossDamageBolt bolt)
@@ -249,7 +255,7 @@ namespace YuumisProwl.Managers
             // The wave chunk has no ball position — launch it from the fallback origin, or from
             // just below the boss so it visibly rises into it when no fallback is set.
             Vector3 origin = fallbackDamageOrigin != null
-                ? fallbackDamageOrigin.position
+                ? fallbackDamageOrigin
                 : currentBoss.transform.position + Vector3.down * 4f;
 
             BossDamageBolt bolt = AcquireBolt();

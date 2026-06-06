@@ -6,6 +6,19 @@ using YuumisProwl.Utilities;
 namespace YuumisProwl.BallChain
 {
     /// <summary>
+    /// Snapshot of one ball as it is destroyed, captured before the ball is recycled. Carried by
+    /// BallChainManager.OnBallsDestroyed so any destruction-reacting system reads where the ball
+    /// was, what it was, and how much it's worth — for every removal source uniformly.
+    /// </summary>
+    public struct BallDestructionInfo
+    {
+        public Vector3 position;
+        public BallColor color;
+        public int damageValue;
+        public EnemyType enemyType;
+    }
+
+    /// <summary>
     /// Manages the ball chain along the path. Internally the chain is one or more
     /// ChainSegments — contiguous runs of balls. Gaps between segments (e.g. from a
     /// Bomb explosion) persist; each segment moves, recoils, and matches independently.
@@ -79,13 +92,21 @@ namespace YuumisProwl.BallChain
         /// </summary>
         public System.Action<Vector3, int> OnIgnitedBallDestroyed;
         /// <summary>
-        /// Fired whenever an *enemy* ball (enemyType != None) is removed from the chain by any
-        /// means. Params: the enemy type and its world position at removal. BossManager listens
-        /// to apply the per-enemy clear-bonus damage to the boss.
+        /// THE unified destruction hook. Fired once per removal batch from RemoveBalls /
+        /// RemoveBallAtIndex — i.e. for *every* ball that leaves the chain by *any* means (match,
+        /// pierce, bomb, red explosion, icicle, hammer). Carries each destroyed ball's position,
+        /// colour, damageValue, and enemyType. Any "what happens when a ball is destroyed" system
+        /// (boss-damage rays, score, on-kill VFX, …) should subscribe here once and it covers all
+        /// destruction uniformly — no need to hook each removal source separately.
+        ///
+        /// The list is reused between fires: read it synchronously, do not retain it.
         /// </summary>
-        public System.Action<EnemyType, Vector3> OnEnemyDestroyed;
+        public System.Action<List<BallDestructionInfo>> OnBallsDestroyed;
 
         private List<ChainSegment> segments = new List<ChainSegment>();
+        // Reused between OnBallsDestroyed fires so per-removal capture doesn't allocate. Safe because
+        // subscribers consume it synchronously and none re-enter RemoveBalls/RemoveBallAtIndex.
+        private readonly List<BallDestructionInfo> destroyedBuffer = new List<BallDestructionInfo>(16);
         private ObjectPool<Ball> ballPool;
         private bool isMoving = true;
         private int nextSegmentId = 0;
@@ -607,21 +628,18 @@ namespace YuumisProwl.BallChain
                 }
             }
 
-            // Capture enemy disruptors before pooling so BossManager can apply the clear-bonus.
-            List<EnemyType> enemyTypes = null;
-            List<Vector3> enemyPositions = null;
+            // Capture every destroyed ball before pooling for the unified destruction hook.
+            destroyedBuffer.Clear();
             foreach (var node in nodesToRemove)
             {
-                if (node.enemyType != EnemyType.None && node.ball != null)
+                if (node.ball == null) continue;
+                destroyedBuffer.Add(new BallDestructionInfo
                 {
-                    if (enemyTypes == null)
-                    {
-                        enemyTypes = new List<EnemyType>(nodesToRemove.Count);
-                        enemyPositions = new List<Vector3>(nodesToRemove.Count);
-                    }
-                    enemyTypes.Add(node.enemyType);
-                    enemyPositions.Add(node.ball.transform.position);
-                }
+                    position = node.ball.transform.position,
+                    color = node.ball.BallColor,
+                    damageValue = node.damageValue,
+                    enemyType = node.enemyType,
+                });
             }
 
             // Group removals by segment
@@ -671,11 +689,8 @@ namespace YuumisProwl.BallChain
                     OnIgnitedBallDestroyed?.Invoke(primedPositions[i], primedPowers[i]);
             }
 
-            if (enemyTypes != null)
-            {
-                for (int i = 0; i < enemyTypes.Count; i++)
-                    OnEnemyDestroyed?.Invoke(enemyTypes[i], enemyPositions[i]);
-            }
+            if (destroyedBuffer.Count > 0)
+                OnBallsDestroyed?.Invoke(destroyedBuffer);
         }
 
         /// <summary>
@@ -703,10 +718,18 @@ namespace YuumisProwl.BallChain
             Vector3 primedPos = wasPrimed ? node.ball.transform.position : Vector3.zero;
             int primedPower = wasPrimed ? Mathf.Max(1, node.ignitePower) : 0;
 
-            // Capture enemy disruptor before pool return so BossManager can apply the clear-bonus.
-            bool wasEnemy = node.enemyType != EnemyType.None && node.ball != null;
-            EnemyType enemyType = wasEnemy ? node.enemyType : EnemyType.None;
-            Vector3 enemyPos = wasEnemy ? node.ball.transform.position : Vector3.zero;
+            // Capture this ball's full destruction info before pool return for the unified hook.
+            destroyedBuffer.Clear();
+            if (node.ball != null)
+            {
+                destroyedBuffer.Add(new BallDestructionInfo
+                {
+                    position = node.ball.transform.position,
+                    color = node.ball.BallColor,
+                    damageValue = node.damageValue,
+                    enemyType = node.enemyType,
+                });
+            }
 
             if (node.ball != null)
             {
@@ -728,8 +751,8 @@ namespace YuumisProwl.BallChain
             if (wasPrimed)
                 OnIgnitedBallDestroyed?.Invoke(primedPos, primedPower);
 
-            if (wasEnemy)
-                OnEnemyDestroyed?.Invoke(enemyType, enemyPos);
+            if (destroyedBuffer.Count > 0)
+                OnBallsDestroyed?.Invoke(destroyedBuffer);
         }
 
         /// <summary>
@@ -840,6 +863,7 @@ namespace YuumisProwl.BallChain
             float insertAt = anchor.pathProgress;
 
             BallNode newNode = new BallNode(ball, insertAt, 0);
+            newNode.damageValue = 0;
             newNode.segmentId = seg.id;
 
             // Visually spawn the hammer ball off to the side of the path so it slides
