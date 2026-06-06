@@ -176,7 +176,7 @@ namespace YuumisProwl.Managers
                 while (t < half)
                 {
                     t += Time.deltaTime;
-                    alpha = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
+                    alpha = Mathf.Lerp(targetAlpha, originalAlpha, t / half);
                     bossColor.a = alpha;
                     currentBoss.bossMaterial.color = bossColor;
                     wardenColor.a = 1-alpha;
