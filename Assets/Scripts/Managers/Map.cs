@@ -13,9 +13,11 @@ namespace YuumisProwl.Managers
         [SerializeField] private PathController pathController;
         [SerializeField] private LevelData levelData;
         [SerializeField] private Transform bossSpawnPoint;
+        [SerializeField] private Transform projectileSpawnPoint;
 
         public PathController PathController => pathController;
         public LevelData LevelData => levelData;
         public Transform BossSpawnPoint => bossSpawnPoint;
+        public Transform ProjectileSpawnPoint => projectileSpawnPoint;
     }
 }

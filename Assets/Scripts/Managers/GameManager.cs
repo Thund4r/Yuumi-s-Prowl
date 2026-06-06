@@ -115,11 +115,15 @@ namespace YuumisProwl.Managers
 
         private void HandleWaveCleared()
         {
-            if (!bossManager.HandleWaveCleared())
-            {
-                ballSpawner.SpawnNextWave();
-                OnWaveCleared?.Invoke();
-            }
+            // Wave damage now flies to the boss as a bolt, so "did the boss survive?" is no longer
+            // synchronous — BossManager calls back once the chunk lands and the boss is still alive.
+            bossManager.HandleWaveCleared(HandleBossSurvivedWave);
+        }
+
+        private void HandleBossSurvivedWave()
+        {
+            ballSpawner.SpawnNextWave();
+            OnWaveCleared?.Invoke();
         }
 
         /// <summary>
@@ -129,7 +133,7 @@ namespace YuumisProwl.Managers
         /// </summary>
         private void HandleChainCleared()
         {
-            if (!waveCleared)
+            if (!waveCleared && !gameOver)
             {
                 waveCleared = true;
                 HandleWaveCleared();

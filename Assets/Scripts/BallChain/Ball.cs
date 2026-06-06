@@ -46,6 +46,16 @@ namespace YuumisProwl.BallChain
         [Tooltip("Maximum symbol scale multiplier, so extreme ignite power can't make it absurdly large.")]
         [Min(1f)] [SerializeField] private float igniteSymbolMaxScale = 3f;
 
+        [Header("Enemy Visuals (Disruptors)")]
+        [Tooltip("Base colour a Stone enemy paints over the ball (colourless wall). Stones aren't colour-matchable.")]
+        [SerializeField] private Color stoneColor = new Color(0.5f, 0.5f, 0.52f, 1f);
+        [Tooltip("Symbol to indicate a ball is a warden.")]
+        [SerializeField] private GameObject wardenSymbol;
+        [Tooltip("Colour a Warden's base ball is tinted toward (keeps its colour readable for matching, but reads as menacing).")]
+        [SerializeField] private Color wardenTint = new Color(0.12f, 0f, 0.18f, 1f);
+        [Tooltip("How strongly the Warden tint is blended over the ball's colour. 0 = no change, 1 = fully wardenTint.")]
+        [Range(0f, 1f)] [SerializeField] private float wardenTintStrength = 0.4f;
+
         // Cached renderers + instanced materials on the frozen overlay so we can drive
         // their alpha at runtime without mutating the shared material asset.
         private Renderer[] frostOverlayRenderers;
@@ -73,9 +83,16 @@ namespace YuumisProwl.BallChain
         private int igniteStacks = 0;
         private bool primed = false;
         private int ignitePower = 1;
+        private EnemyType enemyType = EnemyType.None;
 
         public BallColor BallColor => ballColor;
         public BallPowerUpType PowerUpType => powerUpType;
+        public EnemyType EnemyType => enemyType;
+        /// <summary>
+        /// True if this ball can take part in a colour match. False for power-up balls and for
+        /// Stone enemies (colourless walls). Wardens are coloured, so they remain matchable.
+        /// </summary>
+        public bool IsColorMatchable => powerUpType == BallPowerUpType.None && enemyType != EnemyType.Stone;
         /// <summary>
         /// Generic numeric payload for the active power-up.
         /// For Hammer: the recoil distance in world units.
@@ -197,6 +214,16 @@ namespace YuumisProwl.BallChain
             powerUpValue = value;
             if (powerUpIndicator != null)
                 powerUpIndicator.SetActive(type != BallPowerUpType.None);
+            UpdateVisuals();
+        }
+
+        /// <summary>
+        /// Tags this ball as an enemy disruptor (or clears it). Drives the base-colour
+        /// override (grey Stone / tinted Warden) and matchability. Call after Initialize().
+        /// </summary>
+        public void SetEnemyType(EnemyType type)
+        {
+            enemyType = type;
             UpdateVisuals();
         }
 
@@ -357,7 +384,18 @@ namespace YuumisProwl.BallChain
                 return;
             }
 
-            SetBallColor(ApplyIgniteTint(BallColorUtils.ToUnityColor(ballColor)));
+            if (enemyType == EnemyType.Stone)
+            {
+                // Colourless wall — paint it grey so it reads as inert stone, not a colour.
+                SetBallColor(stoneColor);
+                return;
+            }
+
+            Color resting = ApplyIgniteTint(BallColorUtils.ToUnityColor(ballColor));
+            if (enemyType == EnemyType.Warden)
+                resting = Color.Lerp(resting, wardenTint, wardenTintStrength);
+                wardenSymbol.SetActive(enemyType == EnemyType.Warden);
+            SetBallColor(resting);
         }
 
         /// <summary>
@@ -464,6 +502,7 @@ namespace YuumisProwl.BallChain
             igniteStacks = 0;
             primed = false;
             ignitePower = 1;
+            enemyType = EnemyType.None;
             if (ignitePulseRoutine != null) { StopCoroutine(ignitePulseRoutine); ignitePulseRoutine = null; }
             if (powerUpIndicator != null)
                 powerUpIndicator.SetActive(false);

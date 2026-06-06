@@ -65,6 +65,14 @@ namespace YuumisProwl.BallChain
         /// (0 = initial match in the sequence, 1+ = cascade). Gated by enableDestructionEffects.
         /// </summary>
         public System.Action<List<Vector3>, BallColor, int> OnMatchVisual;
+        /// <summary>
+        /// Fired immediately before RemoveBalls (like OnMatchVisual) but NOT gated by
+        /// enableDestructionEffects — carries the per-ball world positions and their per-ball
+        /// damageValue, aligned by index. BossManager uses it to launch one damage bolt per ball
+        /// carrying that ball's own damage. The matching OnBallsDestroyed (post-removal) is the
+        /// trigger that actually fires the bolts, so the Warden shield is evaluated after removal.
+        /// </summary>
+        public System.Action<List<Vector3>, List<int>> OnMatchBallsDamaged;
 
         private void Start()
         {
@@ -152,7 +160,7 @@ namespace YuumisProwl.BallChain
 
                 FireMatchVisual(matched, matchedColor, existingSeq.matchCount);
 
-                ballChainManager.RemoveBalls(matched);
+                ballChainManager.RemoveBalls(WithAdjacentStones(matched));
                 existingSeq.matchCount++;
                 existingSeq.lastGapGlobalIndex = gapGlobalBeforeRemoval;
 
@@ -202,7 +210,7 @@ namespace YuumisProwl.BallChain
 
             FireMatchVisual(matched, color, seq.matchCount);
 
-            ballChainManager.RemoveBalls(matched);
+            ballChainManager.RemoveBalls(WithAdjacentStones(matched));
             seq.matchCount++;
             seq.lastGapGlobalIndex = gapGlobal;
 
@@ -249,7 +257,7 @@ namespace YuumisProwl.BallChain
                 FireMatchVisual(matchedBalls, matchedColor, sequenceState.matchCount);
 
                 int segCountBefore = ballChainManager.GetSegments().Count;
-                ballChainManager.RemoveBalls(matchedBalls);
+                ballChainManager.RemoveBalls(WithAdjacentStones(matchedBalls));
                 sequenceState.matchCount++;
                 sequenceState.lastGapGlobalIndex = gapGlobalBeforeRemoval;
 
@@ -632,16 +640,22 @@ namespace YuumisProwl.BallChain
 
         private void FireMatchVisual(List<BallNode> matched, BallColor color, int cascadeIndex)
         {
-            if (!enableDestructionEffects || OnMatchVisual == null) return;
+            bool wantDamage = OnMatchBallsDamaged != null;                       // boss damage — not gated by effects
+            bool wantVisual = enableDestructionEffects && OnMatchVisual != null; // particles/combo — gated
+            if (!wantDamage && !wantVisual) return;
 
             var positions = new List<Vector3>(matched.Count);
+            List<int> damages = wantDamage ? new List<int>(matched.Count) : null;
             for (int i = 0; i < matched.Count; i++)
             {
-                if (matched[i].ball != null)
-                    positions.Add(matched[i].ball.transform.position);
+                if (matched[i].ball == null) continue;
+                positions.Add(matched[i].ball.transform.position);
+                if (damages != null) damages.Add(matched[i].damageValue);
             }
-            if (positions.Count > 0)
-                OnMatchVisual.Invoke(positions, color, cascadeIndex);
+            if (positions.Count == 0) return;
+
+            if (wantDamage) OnMatchBallsDamaged.Invoke(positions, damages);
+            if (wantVisual) OnMatchVisual.Invoke(positions, color, cascadeIndex);
         }
 
         private ChainSegment FindSegmentById(int id)
@@ -650,6 +664,46 @@ namespace YuumisProwl.BallChain
             for (int i = 0; i < segs.Count; i++)
                 if (segs[i].id == id) return segs[i];
             return null;
+        }
+
+        /// <summary>
+        /// A colour match adjacent to a Stone enemy cracks it. Returns the matched list expanded
+        /// to include any Stone bordering the matched run within its segment (so the same
+        /// RemoveBalls call destroys them — and fires OnEnemyDestroyed for the clear-bonus).
+        /// Returns the original list unchanged when no Stone borders the run. AoE removals already
+        /// destroy Stones for free (they're plain balls to OverlapSphere), so only matches need this.
+        /// </summary>
+        private List<BallNode> WithAdjacentStones(List<BallNode> matched)
+        {
+            if (matched == null || matched.Count == 0) return matched;
+
+            ChainSegment seg = FindSegmentById(matched[0].segmentId);
+            if (seg == null) return matched;
+
+            int first = seg.balls.IndexOf(matched[0]);
+            int last = seg.balls.IndexOf(matched[matched.Count - 1]);
+            if (first < 0 || last < 0) return matched;
+            if (last < first) { int tmp = first; first = last; last = tmp; }
+
+            List<BallNode> result = null;
+            int before = first - 1;
+            int after = last + 1;
+            if (before >= 0 && IsStone(seg.balls[before]))
+            {
+                result = new List<BallNode>(matched);
+                result.Add(seg.balls[before]);
+            }
+            if (after < seg.Count && IsStone(seg.balls[after]))
+            {
+                if (result == null) result = new List<BallNode>(matched);
+                result.Add(seg.balls[after]);
+            }
+            return result ?? matched;
+        }
+
+        private static bool IsStone(BallNode node)
+        {
+            return node != null && node.ball != null && node.ball.EnemyType == EnemyType.Stone;
         }
 
         private int LocalIndexOfGlobal(ChainSegment seg, int globalIndex)

@@ -231,6 +231,28 @@ namespace YuumisProwl.Projectile
         }
 
         /// <summary>
+        /// Binds the active map's projectile spawn point (called by LevelManager on each load).
+        /// The loaded projectile may have been spawned (in Start) before this map's point existed,
+        /// so it's sitting at the old/default point — re-seat it here. If nothing is loaded (e.g.
+        /// cleared at the previous level's end), load one now at the new point.
+        /// </summary>
+        public void SetProjectileSpawnpoint(Transform sp)
+        {
+            spawnPoint = sp;
+            if (sp == null) return;
+
+            if (currentProjectile != null)
+            {
+                currentProjectile.transform.position = sp.position;
+                currentProjectile.transform.rotation = sp.rotation;
+            }
+            else if (inFlightProjectiles.Count == 0)
+            {
+                SpawnNextProjectile();
+            }
+        }
+
+        /// <summary>
         /// Attempts to launch the projectile if cooldown has elapsed.
         /// </summary>
         private void TryLaunchProjectile(Vector3 targetWorldPos)
@@ -294,6 +316,13 @@ namespace YuumisProwl.Projectile
 
         private void SpawnNextProjectile()
         {
+            if (spawnPoint == null)
+            {
+                Debug.LogWarning("ProjectileSpawner: spawnPoint is null — cannot load a projectile. " +
+                    "Check the active map prefab has its ProjectileSpawnPoint wired (Map.ProjectileSpawnPoint).");
+                return;
+            }
+
             Projectile projectile = projectilePool.Get();
             if (projectile == null) return;
 
@@ -363,6 +392,7 @@ namespace YuumisProwl.Projectile
                         {
                             var node = seg.balls[i];
                             if (node == null || node.ball == null) continue;
+                            if (!node.ball.IsColorMatchable) continue; // Stones/power-ups aren't a shootable colour
                             int idx = (int)node.ball.BallColor;
                             if (idx >= 0 && idx < maxColors) present[idx] = true;
                         }
@@ -413,6 +443,7 @@ namespace YuumisProwl.Projectile
                     var node = seg.balls[i];
                     if (node?.ball == null) continue;
                     if (!node.ball.gameObject.activeInHierarchy) continue;
+                    if (!node.ball.IsColorMatchable) continue; // Stones aren't a matchable colour
                     if (node.ball.BallColor == color) return true;
                 }
             }

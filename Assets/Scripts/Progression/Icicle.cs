@@ -1,28 +1,27 @@
 using UnityEngine;
 using YuumisProwl.BallChain;
+using YuumisProwl.VFX;
 
 namespace YuumisProwl.Progression
 {
     /// <summary>
     /// Blue Ice-Patches synergy projectile. Spawned by IceSynergy when a frozen ball is
-    /// destroyed; locks onto a target Ball, homes to it, destroys it on arrival. Chain
-    /// reactions happen naturally: if the target was itself frozen, its destruction will
-    /// fire OnFrozenBallDestroyed which spawns another icicle.
+    /// destroyed; locks onto a target Ball and destroys it on arrival. Chain reactions happen
+    /// naturally: if the target was itself frozen, its destruction fires OnFrozenBallDestroyed
+    /// which spawns another icicle.
     ///
-    /// Lightweight by design — does not pierce, does not insert, does not interact with
-    /// power-ups. Pure single-target destruction. Spawn via IceSynergy, not directly.
+    /// Flight is the shared HomingBolt curve — it kicks out perpendicular to the spawn→target
+    /// line, then curves in steeply and hits. Lightweight by design: does not pierce, insert, or
+    /// interact with power-ups. Spawn via IceSynergy, not directly.
     /// </summary>
-    public class Icicle : MonoBehaviour
+    public class Icicle : HomingBolt
     {
         private Ball target;
-        private float speed;
-        private float arrivalDistance;
         private BallChainManager chainManager;
         private MatchProcessor matchProcessor;
         private IceSynergy owner;
-        private bool active;
 
-        /// <summary>Currently-locked target. Used by IceSynergy to track targeted set.</summary>
+        /// <summary>Currently-locked target. Used by IceSynergy to track the targeted set.</summary>
         public Ball Target => target;
 
         public void Launch(
@@ -34,66 +33,47 @@ namespace YuumisProwl.Progression
             MatchProcessor matchProc,
             IceSynergy iceOwner)
         {
-            transform.position = spawnPosition;
             target = lockedTarget;
-            speed = speedUnitsPerSecond;
-            arrivalDistance = arrivalDist;
             chainManager = chainMgr;
             matchProcessor = matchProc;
             owner = iceOwner;
-            active = true;
-            gameObject.SetActive(true);
+
+            Vector3 targetPos = lockedTarget != null ? lockedTarget.transform.position : spawnPosition + Vector3.up;
+            Vector3 initialDir = PerpendicularLaunchDir(spawnPosition, targetPos);
+            BeginFlight(spawnPosition, initialDir, speedUnitsPerSecond, arrivalDist);
         }
 
-        private void Update()
+        protected override Vector3? GetTargetPosition()
         {
-            if (!active) return;
-
             // Target gone (destroyed by something else, returned to pool, etc.) — give up.
-            // The owner will untrack via OnDestroy / explicit release; nothing to destroy.
             if (target == null || !target.gameObject.activeInHierarchy || target.ChainIndex < 0)
-            {
-                Resolve(false);
-                return;
-            }
-
-            Vector3 toTarget = target.transform.position - transform.position;
-            float dist = toTarget.magnitude;
-
-            if (dist <= arrivalDistance)
-            {
-                int idx = target.ChainIndex;
-                if (chainManager != null && idx >= 0)
-                {
-                    chainManager.RemoveBallAtIndex(idx);
-                    // Hand off to MatchProcessor so cascade detection / chain-cleared logic
-                    // runs the same way it does for Bomb / Pierce / red-explosion removals.
-                    if (matchProcessor != null)
-                        matchProcessor.ProcessPierceAftermath(1);
-                }
-                Resolve(true);
-                return;
-            }
-
+                return null;
             // Aim at the target's live position so chain movement / gap-closing can't shake it.
-            Vector3 dir = toTarget / dist;
-            transform.position += dir * (speed * Time.deltaTime);
-
-            // Face the direction of travel (2D billboard — same convention as ball rotation).
-            float angle = Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
-            transform.rotation = Quaternion.Euler(0f, 0f, angle - 90f);
+            return target.transform.position;
         }
 
-        private void Resolve(bool _hitTarget)
+        protected override void OnArrived()
         {
-            if (!active) return;
-            active = false;
+            int idx = target != null ? target.ChainIndex : -1;
+            if (chainManager != null && idx >= 0)
+            {
+                chainManager.RemoveBallAtIndex(idx);
+                // Hand off to MatchProcessor so cascade detection / chain-cleared logic runs the
+                // same way it does for Bomb / Pierce / red-explosion removals.
+                if (matchProcessor != null)
+                    matchProcessor.ProcessPierceAftermath(1);
+            }
+            if (owner != null) owner.ReleaseIcicle(this);
+        }
+
+        protected override void OnTargetLost()
+        {
             if (owner != null) owner.ReleaseIcicle(this);
         }
 
         public void HardReset()
         {
-            active = false;
+            StopFlight();
             target = null;
             chainManager = null;
             matchProcessor = null;

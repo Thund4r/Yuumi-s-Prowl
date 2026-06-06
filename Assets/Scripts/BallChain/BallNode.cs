@@ -50,6 +50,17 @@ namespace YuumisProwl.BallChain
         public int staticStacks;
         public int ignitePower;
         public int frozenPower;
+        /// <summary>
+        /// Enemy disruptor carried by this ball (None for a normal ball). Set at spawn by
+        /// BallChainManager.SpawnBall; mirrored onto the Ball for matchability + visuals.
+        /// </summary>
+        public EnemyType enemyType;
+        /// <summary>
+        /// Boss damage this ball deals when cleared. Default 1. Future systems (colour synergies,
+        /// enemy types, upgrades) can raise it; BossManager fires one damage bolt per ball carrying
+        /// this value, so a mass clear of varied-damage balls launches varied-size bolts.
+        /// </summary>
+        public int damageValue;
 
         public BallNode(Ball ball, float pathProgress, int chainIndex)
         {
@@ -66,6 +77,8 @@ namespace YuumisProwl.BallChain
             this.staticStacks = 0;
             this.ignitePower = 0;
             this.frozenPower = 0;
+            this.enemyType = EnemyType.None;
+            this.damageValue = 1;
         }
     }
 }

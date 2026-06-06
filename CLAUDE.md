@@ -10,13 +10,15 @@
 **Yuumi's Prowl** is a mobile 2D puzzle game combining Zuma-style ball-chain mechanics with League of Legends' Yuumi character and her signature homing projectile ability (Q - Prowling Projectile).
 
 ### Core Gameplay Loop
-1. Colored balls emerge from a hole and move along a curved spline path toward the end
+Each level is a **boss siege**: a boss with an HP bar that the player whittles down wave by wave.
+1. A wave of colored balls is dumped below the hole and surges up the spline path toward the end
 2. Player taps to shoot Yuumi's homing projectile toward their cursor/finger
 3. Projectile inserts into the ball chain on collision
-4. 3+ consecutive matching colors are destroyed; cascade matches are detected at segment-merge boundaries
+4. 3+ consecutive matching colors are destroyed; cascade matches are detected at segment-merge boundaries. Each destroyed ball deals damage to the boss (`BossManager` listens to `OnBallsDestroyed`)
 5. With a gap present, only the front segment moves (it pulls backward at `gapCloseSpeed`) until it absorbs everything behind it
-6. **Win:** chain cleared entirely via matches, OR all balls retreat back into the hole via recoil
-7. **Lose:** lead ball reaches the end of the path
+6. When the wave is cleared off-screen, the boss takes a bonus `waveDamage` chunk and — if still alive — the next wave spawns
+7. **Win:** the boss's HP reaches 0 (`BossManager.OnBossDefeated`)
+8. **Lose:** a wave's lead ball reaches the end of the path
 
 ### Technical Stack
 - **Engine:** Unity 2022.3.62f3 LTS
@@ -40,12 +42,13 @@ Single persistent `Game` scene that loads map content as prefabs. Systems commun
 │  win → next-map and lose → retry transitions.            │
 └────────────────────┬─────────────────────────────────────┘
                      │
-          ┌──────────▼──────────┐
-          │     GameManager     │
-          │  Win/lose state,    │
-          │  retreat detection  │
-          └──────────┬──────────┘
-                     │ events
+          ┌──────────▼──────────┐        ┌──────────────┐
+          │     GameManager     │◄───────│ BossManager  │
+          │  Win = boss dead,   │ OnBoss │ boss HP +    │
+          │  lose = ball at end,│Defeated│ wave damage  │
+          │  wave-clear → boss  │───────►│ (per-ball +  │
+          └──────────┬──────────┘ wave   │  wave chunk) │
+                     │ events    cleared └──────────────┘
    ┌─────────────────┼──────────────────┬──────────────────┐
    │                 │                  │                  │
 ┌──▼────────┐  ┌─────▼──────┐  ┌────────▼────────┐  ┌──────▼──────┐
@@ -62,10 +65,11 @@ Single persistent `Game` scene that loads map content as prefabs. Systems commun
 
 | Namespace | Contents |
 |---|---|
-| `YuumisProwl` | `BallColor`, `BallColorUtils`, `LevelData`, `BallPowerUpType` |
+| `YuumisProwl` | `BallColor`, `BallColorUtils`, `LevelData`, `BallPowerUpType`, `BossData` |
 | `YuumisProwl.BallChain` | `Ball`, `BallNode`, `ChainSegment`, `BallChainManager`, `BallSpawner`, `PathController`, `MatchDetector`, `MatchProcessor`, `BallDestructionEffect`, `Obstacle` |
+| `YuumisProwl.Enemy` | `Boss` |
 | `YuumisProwl.Projectile` | `Projectile`, `ProjectileSpawner` |
-| `YuumisProwl.Managers` | `GameManager`, `LevelManager`, `Map` |
+| `YuumisProwl.Managers` | `GameManager`, `LevelManager`, `Map`, `BossManager` |
 | `YuumisProwl.Player` | `YuumiController` |
 | `YuumisProwl.PowerUps` | `PowerUpType`, `PowerUpInventory`, `PowerUpChargeTracker`, `PowerUpSpawner`, `PowerUpSettings`, `PowerUpUIController`, `PowerUpIconDatabase` |
 | `YuumisProwl.Progression` | `RunManager`, `RunConfig`, `RunState`, `RunNode`, `RuntimeStats`, `UpgradeDefinition`, `UpgradeDraftUI` |
@@ -88,9 +92,9 @@ The chain is internally one or more **`ChainSegment`s** (contiguous runs of ball
   - `MergeTouchingSegments` runs each frame and fires `OnSegmentsMerged(mergedSegmentId, boundaryLocalIndex)` — `MatchProcessor` uses this event to run cascade match detection at the merge point. At merge time, balls appended from the behind segment have their `pathProgress` snapped into tight spacing and the displacement recorded in `smoothShift`, so they visually slide into place over `insertionDuration` instead of instantly teleporting on the next propagation frame.
   - Public runtime API: `SetPathController(PathController)`, `SetMoving(bool)`, `SetSpeed(float)`, `ClearChain()`, `HasVisibleBalls()`, `InsertBallAtProgress(BallColor, float, Vector3?)`, `SpawnHammerBall(int, float)`, `GetBallChain()`, `GetSegments()`.
   - Pool is initialized in `Awake` (so it's ready before `LevelManager.Start` runs `LoadMap` → `SpawnBall`).
-  - **Queue system (negative-progress spawning):** new tail balls spawn at `spawnProgress` (default `-0.25`, set below `holeProgress`). The chain logically extends past the hole as an invisible queue; `UpdateBallVisibility` deactivates ball GameObjects whose `pathProgress + smoothShift < holeProgress`. Result: when a back-end ball is destroyed, the queue balls behind it form a real second segment, and the existing multi-segment gap-close pulls them forward to fill the void — no special-case "void fill" code path. `HasVisibleBalls()` and `UpdateBallVisibility()` both use `pathProgress + smoothShift >= holeProgress` so a queue-only chain is correctly treated as empty-on-screen (drives the retreat-win path in GameManager).
+  - **Queue system (negative-progress spawning):** new tail balls spawn at `spawnProgress` (default `-0.25`, set below `holeProgress`). The chain logically extends past the hole as an invisible queue; `UpdateBallVisibility` deactivates ball GameObjects whose `pathProgress + smoothShift < holeProgress`. Result: when a back-end ball is destroyed, the queue balls behind it form a real second segment, and the existing multi-segment gap-close pulls them forward to fill the void — no special-case "void fill" code path. `HasVisibleBalls()` and `UpdateBallVisibility()` both use `pathProgress + smoothShift >= holeProgress` so a queue-only chain is correctly treated as empty-on-screen (drives the wave-clear detection in GameManager).
 - `PathController` — wraps Unity `SplineContainer`. Lives **on each map prefab** alongside its spline (not in the scene). `BallChainManager.SetPathController` rebinds it on each map load.
-- `BallSpawner` — plays the per-level intro animation (AnimationCurve-driven), then feeds tail balls up to `totalBallsToSpawn`. **Does not auto-start** — `LevelManager.LoadMap` calls `StartLevel()` after the map's PathController has been bound.
+- `BallSpawner` — **wave-based.** `StartLevel()` (called by `LevelManager.LoadMap` after the PathController is bound) runs `IntroRoutine` → the opening wave; `SpawnNextWave()` (called by `GameManager` on each wave-clear) spawns subsequent waves. A wave (`StartWave`) dumps `waveBallCount` (or `ballCount` for the intro) balls below the hole via `SpawnBall`, then runs `WaveSurge` — a coroutine that raises `BallChainManager.ChainSpeedMultiplier` to a peak and eases it back to 1 via `SmoothStep`, so the wave surges up out of the hole and settles into gameplay speed. The intro blocks input (`IsPlayingIntro`) for `introDuration`; mid-level waves do not. The old continuous tail-trickle, `totalBallsToSpawn`, and the position-driven spread intro are gone.
 - `MatchDetector` — pure (non-MonoBehaviour) class; detects 3+ consecutive color matches and scans whole segments for `DetectAllMatches`.
 - `MatchProcessor` — owns the segmented match pipeline:
   1. Insertion-driven: after a ball is inserted, wait `destructionDelay`, then `DetectMatchAtIndex` at the insertion site.
@@ -120,7 +124,7 @@ The chain is internally one or more **`ChainSegment`s** (contiguous runs of ball
 
 The game runs in a single persistent `Game.unity` scene; *map content* lives in prefabs under `Assets/Prefabs/Maps/`. There is no transition scene system anymore.
 
-- `LevelData` (ScriptableObject, namespace `YuumisProwl`) — `totalBalls`, `colorCount`, `ballSpeed`. Assigned to a `Map` prefab's root, not directly to the scene.
+- `LevelData` (ScriptableObject, namespace `YuumisProwl`) — `colorCount`, `ballSpeed`. Assigned to a `Map` prefab's root, not directly to the scene. (`totalBalls` was removed when waves replaced the fixed per-level ball count.)
 - `Map` — component placed on the root of a map prefab. Exposes `PathController` and `LevelData` references to whatever's inside that prefab.
 - `LevelManager` — holds a `Map[] mapPrefabs` array. On `Start` instantiates the first map; on win advances to the next (or wraps if `loopMaps`); on lose re-instantiates the same map after `pauseBetweenMaps`. Each `LoadMap` does: destroy current map instance → `ClearChain` → instantiate prefab → `SetPathController` → apply `LevelData` → `InitializeGame` → `SetMoving(true)` → `BallSpawner.StartLevel`. Exposes `IsTransitioning` (true throughout teardown/instantiate/intro).
 - `MainMenu` (scene `Main Menu.unity`) — exposes `Play()` (loads `gameSceneName`) and `Quit()` (`Application.Quit`) as button handlers. The Play button is wired up; a Settings/Options menu is not yet built.
@@ -141,14 +145,21 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
 - `ComboPopup` — world-space `TMP_Text` that animates upward + scales + fades over `duration`, then self-deactivates.
 
 ### Game State
-- `GameManager` — fires `OnGameWon` / `OnGameLost`. `InitializeGame()` is called by `LevelManager.LoadMap` (no longer by `GameManager.Start`).
-  - **Win 1 (fast event):** `MatchProcessor.OnChainCleared` (chain emptied via matches / `ProcessPierceAftermath`).
-  - **Win 2 (per-frame, single converged check):** `!ballChainManager.HasVisibleBalls()` once `gameplayStarted` is set (via `BallSpawner.OnIntroComplete`) and the intro isn't playing. Because `HasVisibleBalls` already treats queue balls (`pathProgress + smoothShift < holeProgress`) as invisible, this single condition covers every win shape: chain-emptied-via-matches, chain-cleared-but-queue-remaining (Step 8 queue system), icicle-only removals, and chain-retreated-via-recoil. The earlier multi-condition Win 2/Win 3 split was collapsed when the queue system made queue-only chains correctly read as "no visible balls."
+- `GameManager` — fires `OnGameWon` / `OnGameLost` / `OnWaveCleared`. `InitializeGame()` is called by `LevelManager.LoadMap` (no longer by `GameManager.Start`). **Clearing the chain no longer wins** — it advances the wave; only defeating the boss wins.
+  - **Wave-clear detection (per-frame latch):** once `gameplayStarted` is set (via `BallSpawner.OnIntroComplete`) and the intro isn't playing, `!ballChainManager.HasVisibleBalls()` fires `HandleWaveCleared` exactly once (latched on `waveCleared`, re-armed when balls become visible again). `MatchProcessor.OnChainCleared` is a faster-firing duplicate of the same trigger, sharing the latch. `HandleWaveCleared` calls `BossManager.HandleWaveCleared()` (deals the boss's `waveDamage` chunk); if that didn't defeat the boss it calls `BallSpawner.SpawnNextWave()` and fires `OnWaveCleared`. Because `HasVisibleBalls` treats queue/below-hole balls as invisible, this covers every clear shape (matches, icicles, gap-close retreat).
+  - **Win:** `BossManager.OnBossDefeated` → `WinGame`. The boss is defeated by accumulated per-ball damage (`OnBallsDestroyed`) plus the per-wave-clear `waveDamage` chunk.
   - **Lose:** `BallChainManager.OnBallReachedEnd`.
+
+### Boss / Wave System
+- `BossData` (ScriptableObject, namespace `YuumisProwl`, create via **Yuumi → Boss Data**) — per-boss tuning: `maxHealth`, `waveDamage` (bonus dealt when a wave is cleared), plus wave/enemy authoring stubs (`waveSpawnInterval`, `ballSpeedMultiplier`, `enemySpawnInterval`) not yet consumed.
+- `Boss` (MonoBehaviour, namespace `YuumisProwl.Enemy`) — holds a `BossData`; computes `Health = maxHealth × healthMultiplier` on `Start`. `TakeDamage(int)` / `TakeWaveDamage()` clamp HP at 0, return `true` when the hit defeats the boss, and fire `OnDefeated`. `SetHealthMultiplier(float)` is called by `BossManager` right after `Instantiate` (before `Start` computes HP).
+- `BossManager` (scene component, namespace `YuumisProwl.Managers`) — owns `bossPrefab` and the live `currentBoss`. `SpawnBoss(Transform spawnPoint, float healthMult)` (called per floor by `LevelManager.LoadMap`) instantiates the boss parented to the map's `BossSpawnPoint` so it's destroyed with the map. Subscribes to `MatchProcessor.OnBallsDestroyed` → per-ball damage. `HandleWaveCleared()` applies the `waveDamage` chunk and returns whether the boss died. Re-broadcasts the boss instance's `OnDefeated` as the stable `OnBossDefeated`, which `GameManager` subscribes to once (the re-broadcast hides the per-floor instance churn from `GameManager`).
+- Per-floor boss HP scales via `RunConfig.bossHealthCurve` → `RunManager` → `LoadMap(..., bossHealthMult)`.
+- The map's boss spawn location is a `Transform` (`Map.BossSpawnPoint`) placed inside each map prefab.
 
 ### Progression & In-Run Upgrades
 - `RunManager` — orchestrates a run: generates `RunNode[]`, loads maps via `LevelManager`, listens to `GameManager.OnGameWon` to trigger draft UI, applies upgrades, and advances to the next node. On loss or final node win, ends the run, clears balls, and grants essence reward to `PlayerProfile`. Resets `RuntimeStats` at run start and applies meta upgrades from profile. Calculates essence rewards based on floors cleared, depth multiplier, difficulty multiplier, and player's meta upgrade bonuses.
-- `RunConfig` (ScriptableObject) — run authoring: `mapPool[]`, `mapCount`, `allowDuplicates`, and difficulty curves `ballSpeedCurve` / `totalBallsCurve` (sampled as multipliers based on floor progress `t`).
+- `RunConfig` (ScriptableObject) — run authoring: `mapPool[]`, `mapCount`, `allowDuplicates`, and difficulty curves `ballSpeedCurve` / `bossHealthCurve` (sampled as multipliers based on floor progress `t`; `bossHealthCurve` scales `BossData.maxHealth` via `BossManager.SpawnBoss(spawnPoint, healthMult)` → `Boss.SetHealthMultiplier`).
 - `RunState` — in-memory run state: `RunNode[]`, `currentNodeIndex`, `gold`, `appliedUpgrades[]`. Discarded at run end; meta persistence lives in `PlayerProfile`.
 - `RunNode` / `RunNodeType` — defines one step in a run: `Gameplay` (load a map) or `Shop` (stubbed for step 6).
 - `RuntimeStats` (MonoBehaviour) — mutable per-run wrapper for tunables: `YuumiRotationSpeed`, `ChargePerBallDestroyed`, `CascadeBonusCharge`, `ChargeThreshold`, `PierceMaxDistance`, `PierceSpeedMultiplier`, `PierceWidthMultiplier`, `ExplosionRadius`, `HammerRecoilDistance`. `ResetToDefaults()` copies baselines from `PowerUpSettings`. Consumed by `YuumiController`, `PowerUpChargeTracker`, `ProjectileSpawner`, etc. with null-safe fallbacks. `ExplosionRadius` (Bomb power-up + red-match explosions) is **count-scaled** — set by `RunManager.RecomputeSynergyStats()` from the number of red colour-synergy upgrades owned, not by an upgrade card.
@@ -174,7 +185,7 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
 ### Colour Unlock Progression
 - A fresh profile starts with the **first 3 entries of the `BallColor` enum unlocked** (`PlayerProfileManager.StartingUnlockedColors`); the cap is 5 (`MaxUnlockableColors`, must match enum length). Enum order is the unlock order — current order is Red → Blue → Green → Purple → Orange, so starters are Red/Blue/Green and Purple, then Orange unlock later.
 - A full-run clear (any `EndRun(won: true)` from `RunManager`) calls `PlayerProfileManager.UnlockNextColor()`, which increments and saves; it's a no-op once at the cap. Editor shortcut: Shift+U.
-- The cap is plumbed via `LevelManager.LoadMap(prefab, ballSpeedMult, totalBallsMult, colorCountCap)` — `RunManager` passes `GetUnlockedColorCount()`, and `LoadMap` clamps `LevelData.colorCount` to `min(authored, cap)` before calling `BallSpawner.SetColorCount`. `ProjectileSpawner` already reads colour count from the canonical `BallSpawner.ColorCount`, so projectile colours follow automatically.
+- The cap is plumbed via `LevelManager.LoadMap(prefab, ballSpeedMult, colorCountCap, bossHealthMult)` — `RunManager` passes `GetUnlockedColorCount()`, and `LoadMap` clamps `LevelData.colorCount` to `min(authored, cap)` before calling `BallSpawner.SetColorCount`. `ProjectileSpawner` already reads colour count from the canonical `BallSpawner.ColorCount`, so projectile colours follow automatically.
 - Colour-locked upgrades are hidden in drafts/shops: `RunManager.IsAvailable` filters out any `UpgradeDefinition` flagged `IsColorSynergy` whose `TargetColor` is locked. Non-synergy upgrades (e.g. `PierceWidth`, `GoldGainBonus`) are unaffected. So unlocking a new colour also unlocks its full pool of synergy cards.
 - Save migration: old saves without `unlockedColorCount` deserialize as 0; `SanitizeProfile` clamps up to `StartingUnlockedColors`, so existing players begin at 3 colours after the update.
 
@@ -227,9 +238,13 @@ Assets/
 │   │   ├── MatchProcessor.cs          ← in BallChain/, not Managers/
 │   │   ├── Obstacle.cs
 │   │   └── PathController.cs
+│   ├── Enemy/
+│   │   └── Boss.cs                    ← boss HP holder, namespace YuumisProwl.Enemy
 │   ├── MainMenu/
 │   │   └── MainMenu.cs
 │   ├── Managers/
+│   │   ├── BossData.cs                ← ScriptableObject, namespace YuumisProwl (root)
+│   │   ├── BossManager.cs             ← spawns the boss per floor, routes ball damage
 │   │   ├── GameManager.cs
 │   │   ├── LevelData.cs               ← namespace YuumisProwl (root)
 │   │   ├── LevelManager.cs            ← map loader
@@ -321,13 +336,13 @@ All input handling uses `#if UNITY_EDITOR || UNITY_STANDALONE` / `#else` guards 
 2. Add the `Map` component to it.
 3. Add a child GameObject with `SplineContainer` + `PathController` (PathController has `RequireComponent<SplineContainer>`). Sculpt the spline.
 4. Add child GameObjects for obstacles (each with a Collider + the `Obstacle` component) and any decorations.
-5. On `Map`, drag the child `PathController` into **Path Controller** and a `LevelData` asset into **Level Data**.
+5. On `Map`, drag the child `PathController` into **Path Controller**, a `LevelData` asset into **Level Data**, and a child `Transform` into **Boss Spawn Point** (where the boss appears for this map).
 6. Drag the `Map_XX` GameObject into `Assets/Prefabs/Maps/` to create the prefab; then delete it from the scene.
 7. On `LevelManager` in `Game.unity`, add the new prefab to **Map Prefabs**.
 
 ### Create a new `LevelData` asset
 1. Right-click in `Assets/Data/Levels/` → **Create → Yuumi → Level Data**.
-2. Set `levelName`, `totalBalls`, `colorCount`, `ballSpeed`.
+2. Set `levelName`, `colorCount`, `ballSpeed`.
 3. Reference it from a Map prefab's `Map` component (not from any scene directly).
 
 ### Add an obstacle
@@ -408,8 +423,8 @@ The most common cause is that `LevelManager.mapPrefabs` is empty or a Map's `Pat
 **Balls overlap after insertion**
 Check `PushSegmentBallsForward` / `PushSegmentBallsBackward` in `BallChainManager`; verify `ballSpacing` matches the visual ball radius.
 
-**Retreat win triggers immediately at start**
-`holeProgress` may be > 0 while intro balls haven't reached it yet. Verify `holeProgress` is set correctly and that `BallSpawner.IsPlayingIntro` is true during the intro.
+**Boss takes a phantom wave-clear hit at start (or balls never appear)**
+The wave spawns below the hole and surges up; if it can't crest `holeProgress` before the intro's `introDuration` window ends, `GameManager` reads "no visible balls" and fires a wave-clear. Verify `holeProgress`/`spawnProgress` are sane, `ballSpeed`/the surge multiplier are non-trivial, and `introDuration` comfortably exceeds the climb time. `IsPlayingIntro` suppresses the wave-clear check during the intro.
 
 **Inserted ball clips into the chain**
 The smooth insertion uses `BallNode.worldOffset` so the new ball slides in from the projectile's actual world position. If clipping returns, check that `Projectile` is passing `transform.position` into `BallChainManager.InsertBallAtProgress(color, progress, projectileWorldPos)`. The decay rate is `ballSpacing / insertionDuration` per second.

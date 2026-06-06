@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using YuumisProwl.BallChain;
+using YuumisProwl.Projectile;
 
 namespace YuumisProwl.Managers
 {
@@ -18,6 +19,7 @@ namespace YuumisProwl.Managers
         [SerializeField] private BallSpawner ballSpawner;
         [SerializeField] private GameManager gameManager;
         [SerializeField] private BossManager bossManager;
+        [SerializeField] private ProjectileSpawner projectileSpawner;
 
         [Header("Maps")]
         [Tooltip("Where instantiated maps are parented. Leave null to parent to this transform.")]
@@ -83,6 +85,9 @@ namespace YuumisProwl.Managers
 
             if (ballChainManager != null)
                 ballChainManager.SetPathController(currentMapInstance.PathController);
+
+            if (projectileSpawner != null)
+                projectileSpawner.SetProjectileSpawnpoint(currentMapInstance.ProjectileSpawnPoint);
 
             LevelData data = currentMapInstance.LevelData;
             if (data != null)

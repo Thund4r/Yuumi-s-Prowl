@@ -25,27 +25,27 @@ namespace YuumisProwl.BallChain
                 return new List<BallNode>();
             }
 
-            // Power-up balls are never part of a color match
-            if (chain[centerIndex].ball.PowerUpType != BallPowerUpType.None)
+            // Power-up balls and non-matchable enemies (Stone) are never part of a color match
+            if (!chain[centerIndex].ball.IsColorMatchable)
                 return new List<BallNode>();
 
             BallColor targetColor = chain[centerIndex].ball.BallColor;
             List<BallNode> matchedBalls = new List<BallNode>();
 
-            // Expand left from center — stop at power-up balls
+            // Expand left from center — stop at power-ups / non-matchable enemies
             int leftIndex = centerIndex;
             while (leftIndex > 0
-                && chain[leftIndex - 1].ball.BallColor == targetColor
-                && chain[leftIndex - 1].ball.PowerUpType == BallPowerUpType.None)
+                && chain[leftIndex - 1].ball.IsColorMatchable
+                && chain[leftIndex - 1].ball.BallColor == targetColor)
             {
                 leftIndex--;
             }
 
-            // Expand right from center — stop at power-up balls
+            // Expand right from center — stop at power-ups / non-matchable enemies
             int rightIndex = centerIndex;
             while (rightIndex < chain.Count - 1
-                && chain[rightIndex + 1].ball.BallColor == targetColor
-                && chain[rightIndex + 1].ball.PowerUpType == BallPowerUpType.None)
+                && chain[rightIndex + 1].ball.IsColorMatchable
+                && chain[rightIndex + 1].ball.BallColor == targetColor)
             {
                 rightIndex++;
             }
@@ -101,12 +101,20 @@ namespace YuumisProwl.BallChain
             int i = 0;
             while (i < chain.Count)
             {
+                // Skip power-ups / non-matchable enemies — they break runs, never group.
+                if (!chain[i].ball.IsColorMatchable)
+                {
+                    i++;
+                    continue;
+                }
+
                 BallColor currentColor = chain[i].ball.BallColor;
                 int matchStart = i;
                 int matchEnd = i;
 
-                // Find consecutive balls of the same color
+                // Find consecutive balls of the same color (stop at non-matchable balls)
                 while (matchEnd < chain.Count - 1 &&
+                       chain[matchEnd + 1].ball.IsColorMatchable &&
                        chain[matchEnd + 1].ball.BallColor == currentColor)
                 {
                     matchEnd++;

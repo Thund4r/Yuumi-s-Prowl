@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using YuumisProwl;
+using YuumisProwl.Managers;
 
 namespace YuumisProwl.BallChain
 {
@@ -15,6 +16,8 @@ namespace YuumisProwl.BallChain
         [SerializeField] private BallChainManager ballChainManager;
         [Tooltip("Per-run stats. When assigned, ColorWeights bias which colors spawn.")]
         [SerializeField] private YuumisProwl.Progression.RuntimeStats runtimeStats;
+        [Tooltip("Optional. When assigned, injects in-chain disruptor enemies into each wave per the boss's spec.")]
+        [SerializeField] private EnemyManager enemyManager;
 
         [Header("Spawn Settings")]
         [Tooltip("Number of balls in the opening intro wave.")]
@@ -118,8 +121,16 @@ namespace YuumisProwl.BallChain
 
             // Spawn the wave below the hole (SpawnBall appends to the back-most segment at
             // spawnProgress and spaced behind it). The surge lifts it into view from below.
+            // The enemy plan (when present) marks which slots spawn as disruptor enemies.
+            EnemyType[] plan = enemyManager != null ? enemyManager.BuildWavePlan(count) : null;
             for (int i = 0; i < count; i++)
-                ballChainManager.SpawnBall(PickColor());
+            {
+                EnemyType et = (plan != null) ? plan[i] : EnemyType.None;
+                if (et == EnemyType.None)
+                    ballChainManager.SpawnBall(PickColor());
+                else
+                    ballChainManager.SpawnBall(PickColor(), et);
+            }
 
             ballChainManager.SetMoving(true);
 

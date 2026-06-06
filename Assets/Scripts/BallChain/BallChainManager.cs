@@ -18,7 +18,7 @@ namespace YuumisProwl.BallChain
     public class BallChainManager : MonoBehaviour
     {
         [Header("References")]
-        [SerializeField] private PathController pathController;
+        private PathController pathController;
         [SerializeField] private Ball ballPrefab;
 
         [Header("Movement Settings")]
@@ -78,6 +78,12 @@ namespace YuumisProwl.BallChain
         /// and detonates a mini-explosion there.
         /// </summary>
         public System.Action<Vector3, int> OnIgnitedBallDestroyed;
+        /// <summary>
+        /// Fired whenever an *enemy* ball (enemyType != None) is removed from the chain by any
+        /// means. Params: the enemy type and its world position at removal. BossManager listens
+        /// to apply the per-enemy clear-bonus damage to the boss.
+        /// </summary>
+        public System.Action<EnemyType, Vector3> OnEnemyDestroyed;
 
         private List<ChainSegment> segments = new List<ChainSegment>();
         private ObjectPool<Ball> ballPool;
@@ -364,8 +370,19 @@ namespace YuumisProwl.BallChain
         /// </summary>
         public void SpawnBall(BallColor color)
         {
+            SpawnBall(color, EnemyType.None);
+        }
+
+        /// <summary>
+        /// Spawns a new ball at the hole, optionally tagged as an enemy disruptor. For a Stone the
+        /// colour is a non-matchable placeholder; for a Warden the colour is a real matchable colour.
+        /// </summary>
+        public void SpawnBall(BallColor color, EnemyType enemyType)
+        {
             Ball ball = ballPool.Get();
             ball.Initialize(color);
+            if (enemyType != EnemyType.None)
+                ball.SetEnemyType(enemyType);
             ball.OnGetFromPool();
 
             ChainSegment backSegment = GetBackSegment();
@@ -379,6 +396,7 @@ namespace YuumisProwl.BallChain
 
             BallNode newNode = new BallNode(ball, spawnProgress, 0);
             newNode.segmentId = backSegment.id;
+            newNode.enemyType = enemyType;
             backSegment.balls.Add(newNode);
 
             UpdateChainIndices();
@@ -589,6 +607,23 @@ namespace YuumisProwl.BallChain
                 }
             }
 
+            // Capture enemy disruptors before pooling so BossManager can apply the clear-bonus.
+            List<EnemyType> enemyTypes = null;
+            List<Vector3> enemyPositions = null;
+            foreach (var node in nodesToRemove)
+            {
+                if (node.enemyType != EnemyType.None && node.ball != null)
+                {
+                    if (enemyTypes == null)
+                    {
+                        enemyTypes = new List<EnemyType>(nodesToRemove.Count);
+                        enemyPositions = new List<Vector3>(nodesToRemove.Count);
+                    }
+                    enemyTypes.Add(node.enemyType);
+                    enemyPositions.Add(node.ball.transform.position);
+                }
+            }
+
             // Group removals by segment
             var bySegment = new Dictionary<int, List<BallNode>>();
             foreach (var node in nodesToRemove)
@@ -635,6 +670,12 @@ namespace YuumisProwl.BallChain
                 for (int i = 0; i < primedPositions.Count; i++)
                     OnIgnitedBallDestroyed?.Invoke(primedPositions[i], primedPowers[i]);
             }
+
+            if (enemyTypes != null)
+            {
+                for (int i = 0; i < enemyTypes.Count; i++)
+                    OnEnemyDestroyed?.Invoke(enemyTypes[i], enemyPositions[i]);
+            }
         }
 
         /// <summary>
@@ -662,6 +703,11 @@ namespace YuumisProwl.BallChain
             Vector3 primedPos = wasPrimed ? node.ball.transform.position : Vector3.zero;
             int primedPower = wasPrimed ? Mathf.Max(1, node.ignitePower) : 0;
 
+            // Capture enemy disruptor before pool return so BossManager can apply the clear-bonus.
+            bool wasEnemy = node.enemyType != EnemyType.None && node.ball != null;
+            EnemyType enemyType = wasEnemy ? node.enemyType : EnemyType.None;
+            Vector3 enemyPos = wasEnemy ? node.ball.transform.position : Vector3.zero;
+
             if (node.ball != null)
             {
                 ballPool.Return(node.ball);
@@ -681,6 +727,9 @@ namespace YuumisProwl.BallChain
 
             if (wasPrimed)
                 OnIgnitedBallDestroyed?.Invoke(primedPos, primedPower);
+
+            if (wasEnemy)
+                OnEnemyDestroyed?.Invoke(enemyType, enemyPos);
         }
 
         /// <summary>

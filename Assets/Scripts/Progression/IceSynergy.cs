@@ -102,6 +102,7 @@ namespace YuumisProwl.Progression
             ReleaseAllIcicles();
             targetedBalls.Clear();
             ClearSlowdown();
+            if (gameManager != null)
             {
                 gameManager.OnGameWon -= HandleRoundEnded;
                 gameManager.OnGameLost -= HandleRoundEnded;

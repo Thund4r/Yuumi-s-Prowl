@@ -248,7 +248,7 @@ namespace YuumisProwl.Projectile
                     var node = balls[i];
                     if (node.ball == null) continue;
                     if (!node.ball.gameObject.activeInHierarchy) continue; // skip invisible queue balls below the hole
-                    if (node.ball.PowerUpType != BallPowerUpType.None) continue; // skip hammers etc.
+                    if (!node.ball.IsColorMatchable) continue; // skip hammers + non-matchable Stones (Wardens stay targetable)
                     if (node.ball.BallColor != projectileColor) continue;
 
                     if (strictOnly && !HasSameColorNeighbor(balls, i)) continue;
@@ -270,13 +270,13 @@ namespace YuumisProwl.Projectile
             if (i > 0)
             {
                 var n = balls[i - 1].ball;
-                if (n != null && n.gameObject.activeInHierarchy && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
+                if (n != null && n.gameObject.activeInHierarchy && n.IsColorMatchable && n.BallColor == projectileColor)
                     return true;
             }
             if (i < balls.Count - 1)
             {
                 var n = balls[i + 1].ball;
-                if (n != null && n.gameObject.activeInHierarchy && n.PowerUpType == BallPowerUpType.None && n.BallColor == projectileColor)
+                if (n != null && n.gameObject.activeInHierarchy && n.IsColorMatchable && n.BallColor == projectileColor)
                     return true;
             }
             return false;
@@ -291,7 +291,7 @@ namespace YuumisProwl.Projectile
         {
             return homingLock != null
                 && homingLock.gameObject.activeSelf
-                && homingLock.PowerUpType == BallPowerUpType.None
+                && homingLock.IsColorMatchable
                 && homingLock.BallColor == projectileColor;
         }
 

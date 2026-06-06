@@ -6,20 +6,28 @@ namespace YuumisProwl.Enemy
     {
         [Header("References")]
         [SerializeField] private BossData bossData;
-        private int Health;
-        private float HealthMultiplier = 1;
+        public BossData Data => bossData;
+        private float Health;
+        private float MaxHealth;
+        private float HealthMultiplier = 1f;
+        private bool defeated;
         public System.Action OnDefeated;
+        public System.Action<float, float> OnHealthChanged; // (current, max)
 
         private void Start()
         {
-            Health = Mathf.RoundToInt(bossData.maxHealth * HealthMultiplier);
+            MaxHealth = bossData.maxHealth * HealthMultiplier;
+            Health = MaxHealth;
         }
 
-        public bool TakeDamage(int damage)
+        public bool TakeDamage(float damage)
         {
-            Health = Mathf.Max(0, Health - damage);
-            if (Health <= 0)
+            if (defeated) return true;
+            Health = Mathf.Max(0f, Health - damage);
+            OnHealthChanged?.Invoke(Health, MaxHealth);
+            if (Health <= 0f)
             {
+                defeated = true;
                 OnDefeated?.Invoke();
                 return true;
             }

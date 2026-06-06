@@ -13,8 +13,15 @@ MonoBehaviour:
   m_Name: BossData_Skull
   m_EditorClassIdentifier: 
   BossName: Skull
-  maxHealth: 300
+  maxHealth: 100
   waveSpawnInterval: 1
   ballSpeedMultiplier: 1
   waveDamage: 40
-  enemySpawnInterval: 1
+  enemySpec:
+  - type: 1
+    perWave: 3
+    clearBonus: 5
+  - type: 2
+    perWave: 1
+    clearBonus: 5
+  wardenDamageReduction: 0.5
