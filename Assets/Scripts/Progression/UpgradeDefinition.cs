@@ -57,6 +57,11 @@ namespace YuumisProwl.Progression
         ArcResonance                 = 31, // raw int — extra charge units per arc hop to colour synergies (frost/ignite/rage). Prereq: Conductor.
         Supercharge                  = 32, // flag — every Nth arc applies double charge. Prereq: Conductor.
         Overload                     = 33, // flag — arc hops onto already-charged balls apply +1 stack. Prereq: Conductor.
+        Poison                       = 34, // flag — anchor green upgrade: destroying green balls poisons the boss (stacking DoT with a refreshing expiry).
+        Virulence                    = 35, // flag — poison tick damage ramps with stack count. Prereq: Poison.
+        HeavyDose                    = 36, // raw int — extra poison stacks per green ball. Prereq: Poison.
+        RapidDecay                   = 37, // raw float — faster poison ticks (seconds removed from interval). Prereq: Poison.
+        LingeringToxin               = 38, // flag — expired poison decays gradually instead of dropping all at once. Prereq: Poison.
     }
 
     [CreateAssetMenu(fileName = "Upgrade_", menuName = "Yuumi/Upgrade Definition")]
@@ -218,6 +223,21 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.Overload:
                     stats.OverloadEnabled = true;
                     break;
+                case UpgradeStat.Poison:
+                    stats.PoisonEnabled = true;
+                    break;
+                case UpgradeStat.Virulence:
+                    stats.PoisonVirulenceEnabled = true;
+                    break;
+                case UpgradeStat.HeavyDose:
+                    stats.PoisonStacksBonus += Mathf.RoundToInt(total);
+                    break;
+                case UpgradeStat.RapidDecay:
+                    stats.PoisonTickReduction += total;
+                    break;
+                case UpgradeStat.LingeringToxin:
+                    stats.PoisonLingerEnabled = true;
+                    break;
             }
         }
 
@@ -279,6 +299,8 @@ namespace YuumisProwl.Progression
                     return $"-{Mathf.RoundToInt(total)} explosion threshold";
                 case UpgradeStat.FrostThresholdReduction:
                     return $"-{Mathf.RoundToInt(total)} freeze threshold";
+                case UpgradeStat.HeavyDose:
+                    return $"+{Mathf.RoundToInt(total)} poison / green";
                 case UpgradeStat.BlueSlowdownDuration:
                     return $"+{total:F1}s slow duration";
                 // Raw float stats.
@@ -292,6 +314,8 @@ namespace YuumisProwl.Progression
                     return $"+{total:F1}s rage duration";
                 case UpgradeStat.FireRate:
                     return $"-{total:F2}s fire cooldown";
+                case UpgradeStat.RapidDecay:
+                    return $"-{total:F2}s poison tick";
                 case UpgradeStat.HomingRange:
                     return $"+{total:F1} homing range";
                 case UpgradeStat.ArcResonance:
@@ -307,6 +331,9 @@ namespace YuumisProwl.Progression
                 case UpgradeStat.Conductor:
                 case UpgradeStat.Supercharge:
                 case UpgradeStat.Overload:
+                case UpgradeStat.Poison:
+                case UpgradeStat.Virulence:
+                case UpgradeStat.LingeringToxin:
                     return "Enabled";
                 default:
                     return "—";

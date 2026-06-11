@@ -22,6 +22,8 @@ namespace YuumisProwl.PowerUps
         [SerializeField] private PowerUpSettings settings;
         [Tooltip("Per-run mutable stats. When assigned, overrides the matching settings values.")]
         [SerializeField] private RuntimeStats runtimeStats;
+        [Tooltip("If true, reaching the charge threshold awards a random potion. Off in the potion rework — potions come from the shop + floor rewards instead.")]
+        [SerializeField] private bool awardOnCharge = false;
 
         private int currentCharge;
 
@@ -83,6 +85,8 @@ namespace YuumisProwl.PowerUps
 
             currentCharge += amount;
             OnChargeChanged?.Invoke(currentCharge, ChargeThreshold);
+
+            if (!awardOnCharge) return; // potion rework: no charge-earned potions
 
             while (currentCharge >= ChargeThreshold)
             {

@@ -115,6 +115,11 @@ namespace YuumisProwl.Managers
 
         private void HandleWaveCleared()
         {
+            // All visible balls are gone, so anything left is below the hole — the cleared wave's
+            // remnants. Discard them so they don't surge back up during the wave-damage delay; the
+            // next ball on screen should be from the fresh wave.
+            if (ballChainManager != null) ballChainManager.ClearChain();
+
             // Wave damage now flies to the boss as a bolt, so "did the boss survive?" is no longer
             // synchronous — BossManager calls back once the chunk lands and the boss is still alive.
             bossManager.HandleWaveCleared(HandleBossSurvivedWave);

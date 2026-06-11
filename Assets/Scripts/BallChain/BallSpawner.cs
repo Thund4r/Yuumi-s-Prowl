@@ -25,18 +25,22 @@ namespace YuumisProwl.BallChain
         [SerializeField] private int colorCount = 4;
 
         [Header("Intro Wave")]
-        [Tooltip("Duration of the opening wave's surge. Longer than a normal wave for a dramatic entrance.")]
-        [SerializeField] private float introDuration = 7f;
-        [Tooltip("Peak chain speed multiplier for the opening wave's surge.")]
-        [SerializeField] private float introSurgeMultiplier = 1.5f;
+        [Tooltip("Path fraction (0-1) the opening wave's front surges up to before settling to normal speed. Input stays blocked until the lead reaches it.")]
+        [Range(0f, 1f)] [SerializeField] private float introSurgeTargetProgress = 0.5f;
 
         [Header("Wave Settings")]
         [Tooltip("Balls dumped into the queue (below the hole) per wave. Normal chain movement pulls them up.")]
         [SerializeField] private int waveBallCount = 20;
-        [Tooltip("Chain speed multiplier while a wave surges up out of the hole, then restored to 1.")]
-        [SerializeField] private float waveSurgeMultiplier = 2.5f;
-        [Tooltip("Seconds the surge multiplier is held before restoring normal speed.")]
-        [SerializeField] private float waveSurgeDuration = 1.5f;
+        [Tooltip("Path fraction (0-1) a wave's front surges up to before settling to normal speed.")]
+        [Range(0f, 1f)] [SerializeField] private float waveSurgeTargetProgress = 0.3f;
+
+        [Header("Surge")]
+        [Tooltip("Chain speed multiplier applied while a wave surges up to its target path fraction.")]
+        [Min(1f)] [SerializeField] private float surgeSpeedMultiplier = 2.5f;
+        [Tooltip("Fraction of the surge (0-1) over which the multiplier eases back down to 1 at the end, so the landing isn't abrupt. e.g. 0.4 = full speed for the first 60%, then ease over the last 40%.")]
+        [Range(0f, 1f)] [SerializeField] private float surgeEaseFraction = 0.4f;
+        [Tooltip("Safety cap (seconds) on how long a surge can run if the lead never reaches its target.")]
+        [Min(0.5f)] [SerializeField] private float surgeTimeout = 12f;
 
         private List<BallColor> recentColors = new List<BallColor>(2);
         private Coroutine surgeRoutine;
@@ -80,20 +84,20 @@ namespace YuumisProwl.BallChain
         }
 
         /// <summary>
-        /// Opening wave. Uses the same queue-and-surge mechanism as mid-level waves, so the
-        /// chain eases from the surge peak straight into normal gameplay speed — no stop or
-        /// teleport. Blocks input only until the first ball crests the hole, then fires
+        /// Opening wave. Uses the same snap-to-hole + surge mechanism as mid-level waves, but blocks
+        /// input until the surge brings the wave's front up to its target fraction, then fires
         /// OnIntroComplete so GameManager's win/wave loop can begin.
         /// </summary>
         private IEnumerator IntroRoutine()
         {
             IsPlayingIntro = true;
-            StartWave(ballCount, introSurgeMultiplier, introDuration);
+            StartWave(ballCount, introSurgeTargetProgress);
 
-            // Wait until the first ball is on screen (safety timeout in case the path is
-            // misconfigured and nothing ever rises out of the hole).
+            // Block input until the surge lifts the wave's front to its target (safety-capped).
             float elapsed = 0f;
-            while (elapsed < introDuration)
+            while (elapsed < surgeTimeout
+                   && ballChainManager.BallCount > 0
+                   && ballChainManager.GetLeadProgress() < introSurgeTargetProgress)
             {
                 elapsed += Time.deltaTime;
                 yield return null;
@@ -112,10 +116,10 @@ namespace YuumisProwl.BallChain
         /// </summary>
         public void SpawnNextWave()
         {
-            StartWave(waveBallCount, waveSurgeMultiplier, waveSurgeDuration);
+            StartWave(waveBallCount, waveSurgeTargetProgress);
         }
 
-        private void StartWave(int count, float surgeMultiplier, float surgeDuration)
+        private void StartWave(int count, float surgeTargetProgress)
         {
             if (ballChainManager == null) return;
 
@@ -133,26 +137,44 @@ namespace YuumisProwl.BallChain
             }
 
             ballChainManager.SetMoving(true);
+            // Skip the dead travel through the spawn-depth: lift the wave to the hole mouth first,
+            // then surge from there.
+            ballChainManager.SnapChainToHole();
 
             if (surgeRoutine != null) StopCoroutine(surgeRoutine);
-            surgeRoutine = StartCoroutine(WaveSurge(surgeMultiplier, surgeDuration));
+            surgeRoutine = StartCoroutine(WaveSurge(surgeTargetProgress));
         }
 
-        // Eases the chain speed from the surge peak smoothly down to normal (x1) over the
-        // duration. SmoothStep landing means no speed jump when the surge ends — the intro
-        // flows straight into gameplay, and mid-level waves settle without a hitch.
-        private IEnumerator WaveSurge(float peakMultiplier, float duration)
+        // Boosts the chain speed (via the transient ChainSpeedMultiplier, so the level's base speed
+        // is untouched) until the wave's front reaches surgeTargetProgress of the path. The multiplier
+        // eases back down to 1 over the last surgeEaseFraction of the climb so the landing isn't abrupt.
+        // Position-based, not time-based: the wave always settles at the same point.
+        private IEnumerator WaveSurge(float surgeTargetProgress)
         {
+            float start = ballChainManager.GetLeadProgress();
+            float span = Mathf.Max(0.0001f, surgeTargetProgress - start);
+
             float elapsed = 0f;
-            float OriSpeed = ballChainManager.GetSpeed();
-            while (elapsed < duration)
+            while (elapsed < surgeTimeout)
             {
+                if (ballChainManager.BallCount == 0) break; // nothing to surge
+                float lead = ballChainManager.GetLeadProgress();
+                if (lead >= surgeTargetProgress) break;     // reached target
+
+                // Full speed for the first (1 - surgeEaseFraction) of the climb, then SmoothStep the
+                // multiplier down to 1 over the final stretch.
+                float fraction = Mathf.Clamp01((lead - start) / span);
+                float easeT = surgeEaseFraction > 0f
+                    ? Mathf.InverseLerp(1f - surgeEaseFraction, 1f, fraction)
+                    : 0f;
+                float mult = Mathf.SmoothStep(surgeSpeedMultiplier, 1f, easeT);
+                ballChainManager.SetChainSpeedMultiplier(Mathf.Max(1f, mult));
+
                 elapsed += Time.deltaTime;
-                float t = Mathf.Clamp01(elapsed / duration);
-                ballChainManager.SetSpeed(Mathf.SmoothStep(peakMultiplier, 1, t));
                 yield return null;
             }
-            ballChainManager.SetSpeed(OriSpeed);
+
+            ballChainManager.SetChainSpeedMultiplier(1f);
             surgeRoutine = null;
         }
 

@@ -100,14 +100,15 @@ namespace YuumisProwl.PowerUps.UI
         }
 
         /// <summary>
-        /// Tap-to-equip, tap-again-to-unequip. Ignores empty slots.
+        /// Uses the slot's potion: armed potions equip (tap again to unequip), instant potions fire
+        /// immediately. Ignores empty slots.
         /// </summary>
         private void OnSlotClicked(int index)
         {
             if (inventory == null) return;
             if (index < 0 || index >= inventory.SlotCount) return;
 
-            inventory.EquipSlot(index);
+            inventory.UseSlot(index);
         }
 
         private void HandleChargeChanged(int current, int threshold)

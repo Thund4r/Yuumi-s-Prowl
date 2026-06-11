@@ -41,6 +41,13 @@ namespace YuumisProwl.Progression
         [Tooltip("Bonus gold awarded per cascade in a match sequence (after the first match).")]
         [Min(0)] public int goldPerCascadeBonus = 5;
 
+        [Header("Potions")]
+        [Tooltip("Chance (0-1) to grant a random potion when a gameplay floor is cleared.")]
+        [Range(0f, 1f)] public float potionRewardChance = 0.35f;
+
+        [Tooltip("Gold cost of a potion in the in-run shop.")]
+        [Min(0)] public int potionShopCost = 40;
+
         [Header("Explosion Synergy (Red)")]
         [Tooltip("Baseline explosion radius (Bomb power-up + red-match explosions) before any red synergy upgrades.")]
         [Min(0f)] public float baseExplosionRadius = 3f;

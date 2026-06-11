@@ -32,8 +32,8 @@ namespace YuumisProwl.PowerUps
         public int cascadeBonusCharge = 3;
         [Tooltip("Charge required to earn a random power-up.")]
         public int chargeThreshold = 10;
-        [Tooltip("Maximum number of power-ups the player can hold at once.")]
-        public int maxPowerUpSlots = 3;
+        [Tooltip("Maximum number of potions the player can hold at once.")]
+        public int maxPowerUpSlots = 4;
 
         [Header("Pierce")]
         [Tooltip("Maximum world-space distance a Pierce projectile travels before despawning.")]
@@ -44,5 +44,9 @@ namespace YuumisProwl.PowerUps
         [Header("Bomb")]
         [Tooltip("World-space radius of the explosion that destroys balls on contact.")]
         public float bombRadius = 3f;
+
+        [Header("Freeze")]
+        [Tooltip("Seconds the chain stops advancing when a Freeze potion is used.")]
+        public float freezeDuration = 4f;
     }
 }

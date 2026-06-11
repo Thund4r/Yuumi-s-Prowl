@@ -23,7 +23,7 @@ MonoBehaviour:
   <IsDraftable>k__BackingField: 1
   <IsShoppable>k__BackingField: 1
   <IsMetaShop>k__BackingField: 0
-  <MaxRank>k__BackingField: 5
+  <MaxRank>k__BackingField: 3
   <ShopCost>k__BackingField: 100
   <RankEssenceCosts>k__BackingField: 
   <Prerequisites>k__BackingField:

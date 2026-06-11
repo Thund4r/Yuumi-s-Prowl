@@ -24,6 +24,12 @@ namespace YuumisProwl.Enemy
 
         void Update()
         {
+            if (Mathf.Approximately(pastHealth, targetHealth)) return;
+
+            if (pastHealth < targetHealth)        // healed: snap up
+            {
+                pastHealth = targetHealth;
+            }
             if (delayTimer > 0f)
             {
                 delayTimer -= Time.deltaTime;
@@ -31,8 +37,8 @@ namespace YuumisProwl.Enemy
             else if (pastHealth > targetHealth)
             {
                 pastHealth = Mathf.MoveTowards(pastHealth, targetHealth, Time.deltaTime / 0.5f);
-                chaseHealthBar.fillAmount = pastHealth;
             }
+            chaseHealthBar.fillAmount = pastHealth;
         }
     }
 

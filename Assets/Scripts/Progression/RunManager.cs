@@ -27,6 +27,10 @@ namespace YuumisProwl.Progression
         [SerializeField] private MetaProgressionSettings metaProgressionSettings;
         [Tooltip("Optional — used to show a floating gold popup after cascades.")]
         [SerializeField] private MatchEffectPlayer matchEffectPlayer;
+        [Tooltip("Player potion inventory — floor rewards + shop purchases add potions here.")]
+        [SerializeField] private PowerUps.PowerUpInventory powerUpInventory;
+        [Tooltip("Icon/tint lookup for potions shown in the shop.")]
+        [SerializeField] private PowerUps.UI.PowerUpIconDatabase potionIcons;
 
         [Header("Upgrades")]
         [Tooltip("Shared database of every upgrade in the game. Also referenced by MetaShopUI.")]
@@ -275,10 +279,15 @@ namespace YuumisProwl.Progression
                 return;
             }
 
+            var potionOffers = PickPotionOffers(inRunShopUI.PotionSlotCount);
+
             inRunShopUI.Show(
                 options,
+                potionOffers,
                 runtimeStats,
                 state,
+                powerUpInventory,
+                potionIcons,
                 config.shopRerollCost,
                 () => PickShopUpgrades(slots),
                 AdvanceToNextNode
@@ -300,8 +309,9 @@ namespace YuumisProwl.Progression
                 ballChainManager.ClearChain();
             }
 
-            // Award gold for clearing this gameplay floor.
+            // Award gold for clearing this gameplay floor, plus a chance at a potion.
             GrantGoldForFloor();
+            TryGrantPotionReward();
 
             if (state.IsLastNode)
             {
@@ -337,6 +347,35 @@ namespace YuumisProwl.Progression
 
             state.gold += gold;
             Debug.Log($"RunManager: awarded {gold} gold for clearing floor. Total: {state.gold}");
+        }
+
+        // The potions a floor reward / shop can roll.
+        private static readonly PowerUps.PowerUpType[] PotionPool =
+        {
+            PowerUps.PowerUpType.Pierce,
+            PowerUps.PowerUpType.Bomb,
+            PowerUps.PowerUpType.Hammer,
+            PowerUps.PowerUpType.Freeze,
+        };
+
+        private void TryGrantPotionReward()
+        {
+            if (powerUpInventory == null || config == null) return;
+            if (Random.value > config.potionRewardChance) return;
+
+            var type = PotionPool[Random.Range(0, PotionPool.Length)];
+            if (powerUpInventory.AddPowerUp(type))
+                Debug.Log($"RunManager: floor reward potion: {type}.");
+        }
+
+        /// <summary>Builds `count` random potion offers (type + shop cost) for the shop.</summary>
+        private PotionOffer[] PickPotionOffers(int count)
+        {
+            if (count <= 0 || config == null) return System.Array.Empty<PotionOffer>();
+            var offers = new PotionOffer[count];
+            for (int i = 0; i < count; i++)
+                offers[i] = new PotionOffer(PotionPool[Random.Range(0, PotionPool.Length)], config.potionShopCost);
+            return offers;
         }
 
         private void HandleMatchSequenceComplete(int cascadeCount, int lastGapGlobalIndex)

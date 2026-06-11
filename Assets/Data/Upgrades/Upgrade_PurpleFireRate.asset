@@ -17,13 +17,13 @@ MonoBehaviour:
   <UpgradeName>k__BackingField: Trigger Discipline
   <Description>k__BackingField: Increase fire rate during rage mode
   <Icon>k__BackingField: {fileID: 0}
-  <ModifierValue>k__BackingField: 0.05
+  <ModifierValue>k__BackingField: 0.1
   <TargetColor>k__BackingField: 3
   <IsColorSynergy>k__BackingField: 1
   <IsDraftable>k__BackingField: 1
   <IsShoppable>k__BackingField: 1
   <IsMetaShop>k__BackingField: 0
-  <MaxRank>k__BackingField: 4
+  <MaxRank>k__BackingField: 2
   <ShopCost>k__BackingField: 100
   <RankEssenceCosts>k__BackingField: 
   <Prerequisites>k__BackingField:

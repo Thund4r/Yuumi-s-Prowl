@@ -72,8 +72,9 @@ namespace YuumisProwl.BallChain
         {
             progress = Mathf.Clamp01(progress);
 
-            // Fallback to a direct evaluation before the table is baked (e.g. edit-mode gizmos).
-            if (pointLUT == null)
+            // Fallback to a direct evaluation before the table is baked (e.g. edit-mode gizmos) or
+            // if it somehow ended up empty/too-short — never index a 0-length array.
+            if (pointLUT == null || pointLUT.Length < 2)
             {
                 if (splineContainer == null) return Vector3.zero;
                 float3 p = splineContainer.EvaluatePosition(progress);
@@ -93,8 +94,9 @@ namespace YuumisProwl.BallChain
         {
             progress = Mathf.Clamp01(progress);
 
-            // Fallback to a direct evaluation before the table is baked (e.g. edit-mode gizmos).
-            if (directionLUT == null)
+            // Fallback to a direct evaluation before the table is baked (e.g. edit-mode gizmos) or
+            // if it somehow ended up empty/too-short — never index a 0-length array.
+            if (directionLUT == null || directionLUT.Length < 2)
             {
                 if (splineContainer == null) return Vector3.right;
                 float3 tangent = splineContainer.EvaluateTangent(progress);

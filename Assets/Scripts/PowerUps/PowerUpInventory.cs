@@ -42,25 +42,52 @@ namespace YuumisProwl.PowerUps
         public System.Action<PowerUpType> OnPowerUpEquipped;
         /// <summary>Fired when the equipped power-up is consumed by a shot.</summary>
         public System.Action OnPowerUpConsumed;
+        /// <summary>Fired when an instant potion (Hammer/Freeze) is used. PotionEffects handles it.</summary>
+        public System.Action<PowerUpType> OnInstantPotionUsed;
+
+        /// <summary>
+        /// Uses the potion in the given slot. Armed potions (Pierce/Bomb) equip to modify the next
+        /// shot; instant potions (Hammer/Freeze) fire immediately and clear the slot. The single
+        /// entry point for both keyboard input and the slot-button UI.
+        /// </summary>
+        public void UseSlot(int index)
+        {
+            if (index < 0 || index >= slots.Length) return;
+            PowerUpType type = slots[index];
+            if (type == PowerUpType.None) return;
+
+            if (type.IsArmed())
+            {
+                EquipSlot(index); // toggle equip; consumed by ProjectileSpawner on launch
+                return;
+            }
+
+            // Instant: clear the slot and fire the effect now.
+            if (equippedSlotIndex == index) UnequipPowerUp();
+            slots[index] = PowerUpType.None;
+            OnInstantPotionUsed?.Invoke(type);
+            OnPowerUpConsumed?.Invoke(); // refresh the slot UI
+            Debug.Log($"PowerUpInventory: Used instant potion {type} (slot {index}).");
+        }
 
         private void Update()
         {
             // Power-up slot selection — a real gameplay control on any platform with a keyboard
             // (editor, desktop, and the WebGL build). Mobile uses the on-screen slot buttons.
             #if UNITY_EDITOR || UNITY_STANDALONE || UNITY_WEBGL
-            if (Input.GetKeyDown(KeyCode.Alpha1)) EquipSlot(0);
-            if (Input.GetKeyDown(KeyCode.Alpha2)) EquipSlot(1);
-            if (Input.GetKeyDown(KeyCode.Alpha3)) EquipSlot(2);
-            if (Input.GetKeyDown(KeyCode.Alpha4)) EquipSlot(3);
+            if (Input.GetKeyDown(KeyCode.Alpha1)) UseSlot(0);
+            if (Input.GetKeyDown(KeyCode.Alpha2)) UseSlot(1);
+            if (Input.GetKeyDown(KeyCode.Alpha3)) UseSlot(2);
+            if (Input.GetKeyDown(KeyCode.Alpha4)) UseSlot(3);
             if (Input.GetKeyDown(KeyCode.Alpha0)) UnequipPowerUp();
             #endif
 
-            // Debug cheat: press P to grant a free Bomb. Kept out of web and mobile builds.
+            // Debug cheat: press P to grant a free Freeze potion. Kept out of web and mobile builds.
             #if UNITY_EDITOR || UNITY_STANDALONE
             if (Input.GetKeyDown(KeyCode.P))
             {
-                AddPowerUp(PowerUpType.Bomb);
-                Debug.Log("PowerUpInventory: Debug Bomb granted.");
+                AddPowerUp(PowerUpType.Freeze);
+                Debug.Log("PowerUpInventory: Debug Freeze potion granted.");
             }
             #endif
         }
@@ -94,6 +121,7 @@ namespace YuumisProwl.PowerUps
         {
             if (index < 0 || index >= slots.Length) return;
             if (slots[index] == PowerUpType.None) return;
+            if (!slots[index].IsArmed()) return; // instant potions fire via UseSlot, never equip
 
             // Toggle: pressing the same slot again unequips
             if (equippedSlotIndex == index)

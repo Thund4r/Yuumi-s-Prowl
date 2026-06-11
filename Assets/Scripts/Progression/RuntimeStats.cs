@@ -92,6 +92,18 @@ namespace YuumisProwl.Progression
         [Tooltip("If true, an arc hop onto an already-charged ball applies one extra stack (Overload upgrade).")]
         public bool OverloadEnabled;
 
+        [Header("Poison Synergy (Green)")]
+        [Tooltip("If true, destroying green balls poisons the boss (stacking DoT with a refreshing expiry). Set by the Poison anchor upgrade.")]
+        public bool PoisonEnabled;
+        [Tooltip("Extra poison stacks applied per green ball destroyed (Heavy Dose).")]
+        public int PoisonStacksBonus;
+        [Tooltip("Seconds removed from the poison tick interval — faster DoT (Rapid Decay). Floored at a minimum.")]
+        public float PoisonTickReduction;
+        [Tooltip("If true, poison damage ramps with stack count: every N stacks multiplies tick damage (Virulence).")]
+        public bool PoisonVirulenceEnabled;
+        [Tooltip("If true, expired poison decays gradually (halving each interval) instead of dropping all stacks at once (Lingering Toxin).")]
+        public bool PoisonLingerEnabled;
+
         [Header("Cached per-floor")]
         [Tooltip("Count of colour-synergy upgrades owned, indexed by BallColor. Populated by RunManager.RecomputeSynergyStats() each floor load.")]
         public int[] ColorSynergyCounts;
@@ -221,6 +233,11 @@ namespace YuumisProwl.Progression
             ArcResonanceBonus = 0;
             SuperchargeEnabled = false;
             OverloadEnabled = false;
+            PoisonEnabled = false;
+            PoisonStacksBonus = 0;
+            PoisonTickReduction = 0f;
+            PoisonVirulenceEnabled = false;
+            PoisonLingerEnabled = false;
             ColorSynergyCounts = new int[ColorCount];
 
             // Rebuild color-synergy arrays — weights baseline 1.0, match-gold baseline 0.

@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System;
 using System.Collections;
+using YuumisProwl.PowerUps;
+using YuumisProwl.PowerUps.UI;
 
 namespace YuumisProwl.Progression
 {
@@ -20,6 +22,9 @@ namespace YuumisProwl.Progression
         [Tooltip("Manually-placed shop card slots. The number of slots is the shop size.")]
         [SerializeField] private InRunShopUpgradeCard[] upgradeCards;
 
+        [Tooltip("Manually-placed potion card slots. The number of slots is how many potions the shop offers.")]
+        [SerializeField] private PotionShopCard[] potionCards;
+
         [SerializeField] private Button continueButton;
         [SerializeField] private Button rerollButton;
         [SerializeField] private TextMeshProUGUI rerollCostText;
@@ -31,9 +36,13 @@ namespace YuumisProwl.Progression
         private int rerollCost;
         private RuntimeStats runtimeStats;
         private RunState runState;
+        private PowerUpInventory inventory;
+        private PowerUpIconDatabase potionIcons;
 
-        /// <summary>Number of card slots — useful for the caller to know how many upgrades to pick.</summary>
+        /// <summary>Number of upgrade card slots — how many upgrades the caller should pick.</summary>
         public int CardSlotCount => upgradeCards != null ? upgradeCards.Length : 0;
+        /// <summary>Number of potion card slots — how many potions the caller should offer.</summary>
+        public int PotionSlotCount => potionCards != null ? potionCards.Length : 0;
 
         private void Awake()
         {
@@ -55,16 +64,20 @@ namespace YuumisProwl.Progression
         /// <summary>
         /// Displays the shop with the given upgrade options.
         /// </summary>
-        public void Show(UpgradeDefinition[] options, RuntimeStats stats, RunState state,
+        public void Show(UpgradeDefinition[] options, PotionOffer[] potionOffers, RuntimeStats stats, RunState state,
+                         PowerUpInventory inventory, PowerUpIconDatabase potionIcons,
                          int rerollCost, Func<UpgradeDefinition[]> rerollGenerator, Action onContinueClicked)
         {
             this.runtimeStats = stats;
             this.runState = state;
+            this.inventory = inventory;
+            this.potionIcons = potionIcons;
             this.rerollCost = rerollCost;
             this.onRerollRequested = rerollGenerator;
             this.onContinue = onContinueClicked;
 
             PopulateCards(options);
+            PopulatePotions(potionOffers);
             UpdateRerollButton();
             RefreshGoldDisplay();
 
@@ -93,6 +106,21 @@ namespace YuumisProwl.Progression
             }
         }
 
+        private void PopulatePotions(PotionOffer[] offers)
+        {
+            if (potionCards == null) return;
+
+            for (int i = 0; i < potionCards.Length; i++)
+            {
+                if (potionCards[i] == null) continue;
+
+                if (offers != null && i < offers.Length)
+                    potionCards[i].SetPotion(offers[i], potionIcons, this);
+                else
+                    potionCards[i].Clear();
+            }
+        }
+
         public bool TryPurchase(UpgradeDefinition upgrade)
         {
             if (upgrade == null || runState == null || runtimeStats == null) return false;
@@ -104,13 +132,33 @@ namespace YuumisProwl.Progression
 
             RefreshGoldDisplay();
             UpdateRerollButton();
-
-            // Buying one upgrade may make others unaffordable — refresh all cards.
-            foreach (var card in upgradeCards)
-            {
-                if (card != null) card.RefreshAffordability();
-            }
+            RefreshAllAffordability();
             return true;
+        }
+
+        /// <summary>Buys a potion: deducts gold and adds it to the inventory. Fails if too poor or the inventory is full.</summary>
+        public bool TryPurchasePotion(PowerUpType type, int cost)
+        {
+            if (runState == null || inventory == null) return false;
+            if (runState.gold < cost) return false;
+            if (!inventory.AddPowerUp(type)) return false; // inventory full
+
+            runState.gold -= cost;
+            RefreshGoldDisplay();
+            UpdateRerollButton();
+            RefreshAllAffordability();
+            return true;
+        }
+
+        // A purchase may make other cards unaffordable — refresh both rows.
+        private void RefreshAllAffordability()
+        {
+            if (upgradeCards != null)
+                foreach (var card in upgradeCards)
+                    if (card != null) card.RefreshAffordability();
+            if (potionCards != null)
+                foreach (var card in potionCards)
+                    if (card != null) card.RefreshAffordability();
         }
 
         public int CurrentGold => runState != null ? runState.gold : 0;

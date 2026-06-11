@@ -65,16 +65,16 @@ Single persistent `Game` scene that loads map content as prefabs. Systems commun
 
 | Namespace | Contents |
 |---|---|
-| `YuumisProwl` | `BallColor`, `BallColorUtils`, `LevelData`, `BallPowerUpType`, `BossData` |
+| `YuumisProwl` | `BallColor`, `BallColorUtils`, `LevelData`, `BallPowerUpType`, `BossData`, `EnemyType`, `BallDestructionInfo` |
 | `YuumisProwl.BallChain` | `Ball`, `BallNode`, `ChainSegment`, `BallChainManager`, `BallSpawner`, `PathController`, `MatchDetector`, `MatchProcessor`, `BallDestructionEffect`, `Obstacle` |
-| `YuumisProwl.Enemy` | `Boss` |
+| `YuumisProwl.Enemy` | `Boss`, `BossHealthBarUI`, `PoisonDialUI` |
 | `YuumisProwl.Projectile` | `Projectile`, `ProjectileSpawner` |
-| `YuumisProwl.Managers` | `GameManager`, `LevelManager`, `Map`, `BossManager` |
+| `YuumisProwl.Managers` | `GameManager`, `LevelManager`, `Map`, `BossManager`, `EnemyManager` |
 | `YuumisProwl.Player` | `YuumiController` |
 | `YuumisProwl.PowerUps` | `PowerUpType`, `PowerUpInventory`, `PowerUpChargeTracker`, `PowerUpSpawner`, `PowerUpSettings`, `PowerUpUIController`, `PowerUpIconDatabase` |
-| `YuumisProwl.Progression` | `RunManager`, `RunConfig`, `RunState`, `RunNode`, `RuntimeStats`, `UpgradeDefinition`, `UpgradeDraftUI` |
-| `YuumisProwl.VFX` | `MatchEffectPlayer`, `ComboPopup` |
-| `YuumisProwl.Utilities` | `ObjectPool<T>` |
+| `YuumisProwl.Progression` | `RunManager`, `RunConfig`, `RunState`, `RunNode`, `RuntimeStats`, `UpgradeDefinition`, `UpgradeDraftUI`, `ExplosionSynergy`, `IceSynergy`, `RageMeter`, `ArcSynergy`, `PoisonSynergy` |
+| `YuumisProwl.VFX` | `MatchEffectPlayer`, `ComboPopup`, `HomingBolt`, `BossDamageBolt`, `PoisonBolt` |
+| `YuumisProwl.Utilities` | `ObjectPool<T>`, `FrameCoalescer` |
 
 ---
 
@@ -206,8 +206,23 @@ The game runs in a single persistent `Game.unity` scene; *map content* lives in 
   - **`FrostThresholdReduction`** (raw int): subtracted from `RunConfig.iceFreezeStackThreshold` (floored at 1). Routed through `IceSynergy.GetEffectiveFreezeThreshold()` so both `TickPatches` and `CryoBurstRoutine` use the same value.
   - **`BlueChainSlowdown`** (flag, count-scaled magnitude): on every blue match, `IceSynergy.ApplyChainSlowdown` computes `1 - blueSynergyCount × RunConfig.blueSlowdownPerUpgrade` (floored at `blueSlowdownMinMultiplier`) and writes it to `BallChainManager.ChainSpeedMultiplier`. The multiplier scales both forward motion and gap-close motion. A per-frame `TickSlowdown` checks `slowdownExpiryTime` and restores the multiplier to 1.0 when the window ends. `ClearChain` resets it to 1.0 between levels.
   - **`BlueSlowdownDuration`** (raw float, prereq `BlueChainSlowdown`): added to `RunConfig.blueSlowdownBaseDuration` for the slowdown window length.
-- Deprecated `UpgradeStat`s — `BombRadius`, `ColorWeight` — explosion radius and colour weight are count-scaled now; don't author cards with these.
-- Not yet built: "dead balls" — Step 8's tracking exists so they're unblocked, not yet built.
+- **Orange Conductor synergy:** `ArcSynergy` (scene component) gated by `RuntimeStats.ConductorEnabled` (the **`Conductor`** anchor). An orange match fires a bouncing arc (RoR2-ukulele style) that hops `RuntimeStats.ArcBounces` balls (count-scaled from orange-upgrade count, with a no-revisit window), charging each hopped ball *by its own colour*: blue → frost stacks, purple → rage, red → ignite stacks, anything else → a weak "static" stack that pops at `RunConfig.staticThreshold`. A red ball that reaches `igniteThreshold` becomes **primed** and leaves a mini-explosion when destroyed; **overcharge** (excess stacks beyond the threshold) scales the ignite blast / frost-icicle count, carried on `BallNode` and relayed through the destruction event. The arc is a pure catalyst — it never fires another colour's gated payoff, only charges the resource. Follow-ups: `ArcResonance` (+charge per hop), `Supercharge` (every Nth arc doubles charge), `Overload` (a hop onto an already-charged ball adds +1).
+- **Green Poison synergy:** `PoisonSynergy` (scene component) gated by `RuntimeStats.PoisonEnabled` (the **`Poison`** anchor). Each green ball destroyed (via the unified `OnBallsDestroyed`) flies a green `PoisonBolt` to the boss; on arrival it adds **uncapped** poison stacks. Poison ticks `stacks × damagePerStack` to the boss every `tickInterval`; a single **refresh-on-feed** expiry timer drops all stacks at once when it lapses. Green synergy-upgrade count scales the **duration** (easier to sustain). Boss UI: `PoisonDialUI` drives a radial fill (full → empty over the duration) + an optional stack-count label. Follow-ups: `Virulence` (tick damage ramps by `⌊stacks/N⌋`), `HeavyDose` (+stacks per green), `RapidDecay` (faster ticks), `LingeringToxin` (on expiry, instead of dropping all, the stack **halves + the dial refills** every `lingerDecayInterval` until gone).
+- Deprecated `UpgradeStat`s — `BombRadius`, `ColorWeight`, `HomingStrict`, `HomingLoose` — count-scaled or rage-driven now; don't author cards with these.
+
+### Enemy Disruptors (in-chain)
+- Enemies are **one-clear disruptor balls** (durability lives on the boss bar, not the balls). Represented as an `EnemyType` enum (`None`/`Stone`/`Warden`) on `BallNode` + `Ball` — chosen over a per-ball MonoBehaviour because balls are pooled (an enum field is pooling-trivial; components are pooling-hostile). Behaviour lives in `EnemyManager` / `BossManager`.
+- Spawned by `EnemyManager.BuildWavePlan` (reads `BossData.enemySpec[]`, scattering enemies across the wave's slots) → `BallSpawner.StartWave` → `BallChainManager.SpawnBall(color, EnemyType)`.
+- **Stone** — colourless non-matchable wall (`Ball.IsColorMatchable` is false; `MatchDetector` skips it). Cracked by an **adjacent colour match** (`MatchProcessor.WithAdjacentStones` expands a match to bordering stones) or **any AoE** (it's a plain ball to `OverlapSphere`).
+- **Warden** — a coloured, matchable ball that **shields the boss**: while any *visible* Warden is alive, `BossManager` reduces ball-clear damage by `BossData.wardenDamageReduction`. The shield is evaluated post-removal, so the hit that clears the last Warden lands full.
+- Both deal a bonus `EnemySpawn.clearBonus` to the boss on death (shielded along with the rest of the hit, so it can't bypass a Warden shield). Phase 2 (not built): Thief (off-chain mobile), Brood, Splitter, Insulated.
+
+### Destruction Pipeline & Damage Bolts
+- **Unified destruction event:** `BallChainManager.OnBallsDestroyed(List<BallDestructionInfo>)` fires once per removal batch from `RemoveBalls` / `RemoveBallAtIndex` — i.e. for *every* ball that leaves the chain by *any* means. Each `BallDestructionInfo` carries `position`, `color`, `damageValue`, `enemyType`, plus the specialized payloads (`wasFrozen`/`frozenPower`, `wasPrimed`/`ignitePower`, `wasHammer`/`hammerRecoil`, `chainIndex`). This is **the** on-destruction hook: `BossManager` (damage), `IceSynergy` (icicles), `ArcSynergy` (ignite blasts), and `MatchProcessor` (hammer recoil) all subscribe here and filter the list. New "on destroy" systems hook once instead of plumbing a new event. (The old `OnHammerDestroyed`/`OnFrozenBallDestroyed`/`OnIgnitedBallDestroyed`/`OnEnemyDestroyed` events were folded into this.)
+- **Per-ball `damageValue`** (on `BallNode`, default 1) lets future systems make some balls hit harder; bolts size-scale to it.
+- **Boss HP is a float** (`Boss.TakeDamage(float)`). Ball-clear and enemy-clear damage flies to the boss as **`BossDamageBolt`s** (one per cleared ball, carrying that ball's shielded `damageValue` + clear-bonus), pooled on `BossManager`. The boss is defeated event-driven when the lethal bolt lands. The per-wave-clear chunk is also a bolt that gates the next-wave spawn on arrival.
+- **`HomingBolt`** (VFX base class) — reusable curved-homing projectile: launches perpendicular to the spawn→target line, then curves in steeply with a guaranteed finish. Powers `Icicle`, `BossDamageBolt`, and `PoisonBolt`. **Use this for any new bolt; don't extend `BossManager.SpawnBolt` (boss-scoped).**
+- **Wave surge is position-based:** `BallSpawner` snaps the freshly-spawned wave to the hole mouth (`BallChainManager.SnapChainToHole`, skipping dead spawn-depth travel), then boosts `ChainSpeedMultiplier` until the wave's front reaches a target path fraction, easing the multiplier back to 1 over the final stretch. The intro input-block ends when the surge reaches its target (no longer a fixed timer).
 
 ---
 
@@ -239,12 +254,16 @@ Assets/
 │   │   ├── Obstacle.cs
 │   │   └── PathController.cs
 │   ├── Enemy/
-│   │   └── Boss.cs                    ← boss HP holder, namespace YuumisProwl.Enemy
+│   │   ├── Boss.cs                    ← boss HP holder (float), damage flash, namespace YuumisProwl.Enemy
+│   │   ├── BossHealthBarUI.cs         ← HP bar + chase-bar
+│   │   ├── EnemyType.cs               ← enum None/Stone/Warden, namespace YuumisProwl (root)
+│   │   └── PoisonDialUI.cs            ← radial poison-duration dial + stack label
 │   ├── MainMenu/
 │   │   └── MainMenu.cs
 │   ├── Managers/
-│   │   ├── BossData.cs                ← ScriptableObject, namespace YuumisProwl (root)
-│   │   ├── BossManager.cs             ← spawns the boss per floor, routes ball damage
+│   │   ├── BossData.cs                ← ScriptableObject (maxHealth, waveDamage, enemySpec, wardenDamageReduction), namespace YuumisProwl (root)
+│   │   ├── BossManager.cs             ← spawns the boss per floor, damage bolts, warden shield
+│   │   ├── EnemyManager.cs            ← plans per-wave enemy spawns from BossData.enemySpec
 │   │   ├── GameManager.cs
 │   │   ├── LevelData.cs               ← namespace YuumisProwl (root)
 │   │   ├── LevelManager.cs            ← map loader
@@ -266,7 +285,12 @@ Assets/
 │   │   ├── PlayerProfile.cs            ← serializable persistent player data
 │   │   ├── PlayerProfileManager.cs     ← save/load + essence grant + upgrade purchase
 │   │   ├── MetaShopUI.cs               ← main meta shop screen controller
-│   │   └── MetaShopUpgradeCard.cs      ← single upgrade card with progress bar + buy button
+│   │   ├── MetaShopUpgradeCard.cs      ← single upgrade card with progress bar + buy button
+│   │   ├── ExplosionSynergy.cs         ← Red: match-triggered explosions
+│   │   ├── IceSynergy.cs / IcePatch.cs / Icicle.cs  ← Blue: ice patches, freeze, icicles
+│   │   ├── RageMeter.cs / RageMeterUI.cs ← Purple: rage meter
+│   │   ├── ArcSynergy.cs               ← Orange: Conductor bouncing arc
+│   │   └── PoisonSynergy.cs            ← Green: poison DoT (PoisonBolt)
 │   ├── PowerUps/
 │   │   ├── PowerUpChargeTracker.cs
 │   │   ├── PowerUpInventory.cs
@@ -281,9 +305,13 @@ Assets/
 │   │   └── ProjectileSpawner.cs
 │   ├── Utilities/
 │   │   ├── BallColorUtils.cs          ← namespace YuumisProwl
+│   │   ├── FrameCoalescer.cs          ← batches same-frame destruction effects into one per cluster
 │   │   └── ObjectPool.cs
 │   └── VFX/
 │       ├── ComboPopup.cs
+│       ├── HomingBolt.cs              ← reusable curved-homing projectile base
+│       ├── BossDamageBolt.cs          ← HomingBolt → carries damage to the boss
+│       ├── PoisonBolt.cs              ← HomingBolt → carries poison stacks to the boss
 │       └── MatchEffectPlayer.cs
 └── Prefabs/
     ├── Balls/
@@ -376,7 +404,9 @@ All three contexts use one `UpgradeDefinition` asset type.
 
 ## Not Yet Implemented
 
-- **Step 7 (extended):** advanced color synergies — red mini-explosions, blue icicles, "dead balls". Step 7 infrastructure (color weighting + color-match gold) is done; Step 8's tracking now exists too, so these effect-heavy synergies are unblocked design-wise but not yet built.
+- **All five colour synergies are built** (Red burst / Blue control / Purple rage / Orange catalyst / Green DoT). Remaining synergy work is balance/tuning and authoring the `.asset` upgrade cards into `UpgradeDatabase`.
+- **Phase-2 enemies:** Thief (off-chain mobile, steal-and-escape), Brood, Splitter, Insulated — only Stone + Warden are built.
+- **Potion rework:** power-ups → Slay-the-Spire-style consumables (designed, not built).
 - Slay-the-Spire-style branching map UI (player chooses path between nodes — currently shop nodes are at fixed positions).
 - Per-map intro animations (Animator hook designed but not built — would live on each Map prefab and be played by `LevelManager.LoadMapRoutine` before `BallSpawner.StartLevel`).
 - Sound effects and music (`BallDestructionEffect` has audio support but no clips wired up).

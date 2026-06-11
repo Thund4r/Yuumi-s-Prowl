@@ -65,6 +65,9 @@ namespace YuumisProwl.Progression
         private readonly List<BallNode> flatChainBuffer = new List<BallNode>(64);
         private FrameCoalescer igniteCoalescer;
         private int arcsFired;
+        // Set when an orange match fires its full arc; consumed by that match's OnBallsDestroyed so
+        // the match's oranges don't also fire per-ball ⅓ arcs.
+        private bool orangeMatchPending;
 
         private void Awake()
         {
@@ -106,7 +109,10 @@ namespace YuumisProwl.Progression
             for (int i = 0; i < positions.Count; i++) centroid += positions[i];
             centroid /= positions.Count;
 
-            StartCoroutine(FireArc(centroid));
+            // Full arc for the match; suppress the per-ball ⅓ arcs for this match's balls (the
+            // matching OnBallsDestroyed fires immediately after) so they don't double up.
+            orangeMatchPending = true;
+            StartCoroutine(FireArc(centroid, runtimeStats.ArcBounces, true));
         }
 
         /// <summary>
@@ -115,25 +121,27 @@ namespace YuumisProwl.Progression
         /// first hop seeks the nearest ball to the match centroid; every hop after picks a random
         /// ball within arcHopChainRange chain positions (front or back) of the current ball.
         /// </summary>
-        private IEnumerator FireArc(Vector3 start)
+        private IEnumerator FireArc(Vector3 start, int bounces, bool applySupercharge)
         {
             // OnMatchVisual fires mid-match-processing (before RemoveBalls); wait a frame so
             // charging / static-popping can't mutate the chain re-entrantly.
             yield return null;
 
             if (ballChainManager == null || runtimeStats == null) yield break;
-            int bounces = runtimeStats.ArcBounces;
             if (bounces <= 0) yield break;
 
             float firstHopRange = config != null ? config.arcRange : 3f;
 
             // Charge units applied to COLOUR synergies (never to static). Supercharge doubles it
-            // every Nth arc.
-            arcsFired++;
+            // every Nth full (match) arc; the weaker per-ball-destroyed arcs don't count or double.
             int units = 1 + Mathf.Max(0, runtimeStats.ArcResonanceBonus);
-            int superN = config != null ? config.superchargeEveryNth : 3;
-            if (runtimeStats.SuperchargeEnabled && superN > 0 && arcsFired % superN == 0)
-                units *= 2;
+            if (applySupercharge)
+            {
+                arcsFired++;
+                int superN = config != null ? config.superchargeEveryNth : 3;
+                if (runtimeStats.SuperchargeEnabled && superN > 0 && arcsFired % superN == 0)
+                    units *= 2;
+            }
 
             var recent = new List<Ball>();        // sliding window of the last few hit balls — off-limits
                                                   // for the next few hops, then revisitable.
@@ -334,12 +342,32 @@ namespace YuumisProwl.Progression
         // Ignite mini-explosion (primed red destroyed)
         // ============================================================
 
-        /// <summary>Unified destruction hook — react to the primed balls in the batch.</summary>
+        /// <summary>
+        /// Unified destruction hook. Detonates primed reds, and fires a weak (⅓-bounce) arc for each
+        /// orange ball destroyed by NON-match means — a match's own oranges are covered by the full
+        /// arc (orangeMatchPending), so they're skipped here to avoid doubling up.
+        /// </summary>
         private void HandleBallsDestroyed(System.Collections.Generic.List<BallDestructionInfo> balls)
         {
+            bool suppressOrangeArc = orangeMatchPending;
+            orangeMatchPending = false; // one-shot: consumed by the match's own destruction batch
+
+            bool conductor = runtimeStats != null && runtimeStats.ConductorEnabled;
+            int miniBounces = conductor ? Mathf.Max(1, runtimeStats.ArcBounces / 3) : 0;
+
             for (int i = 0; i < balls.Count; i++)
-                if (balls[i].wasPrimed)
-                    HandleIgnitedBallDestroyed(balls[i].position, balls[i].ignitePower);
+            {
+                BallDestructionInfo b = balls[i];
+
+                if (b.wasPrimed)
+                    HandleIgnitedBallDestroyed(b.position, b.ignitePower);
+
+                if (conductor && !suppressOrangeArc
+                    && b.color == BallColor.Orange && b.enemyType != EnemyType.Stone)
+                {
+                    StartCoroutine(FireArc(b.position, miniBounces, false));
+                }
+            }
         }
 
         private void HandleIgnitedBallDestroyed(Vector3 worldPos, int ignitePower)

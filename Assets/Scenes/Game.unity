@@ -481,6 +481,68 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 83767683}
   m_CullTransparentMesh: 1
+--- !u!1 &86736748
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 86736749}
+  - component: {fileID: 86736750}
+  m_Layer: 0
+  m_Name: PoisonSynergy
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &86736749
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 86736748}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1861148470}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &86736750
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 86736748}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d6f2a4b8e3c07f5ab2d3e4f5a6b7c8da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  ballChainManager: {fileID: 1842243456}
+  bossManager: {fileID: 1775654144}
+  runtimeStats: {fileID: 1295330462}
+  poisonBoltPrefab: {fileID: 4627338496089572902, guid: 04618e028a7c03342904d40f3b160236, type: 3}
+  initialBoltPoolSize: 12
+  stacksPerGreenBall: 1
+  tickInterval: 0.5
+  damagePerStack: 0.3
+  baseDuration: 4
+  durationPerGreenUpgrade: 1
+  minTickInterval: 0.1
+  virulenceStackInterval: 5
+  virulenceBonusPerStep: 0.5
+  virulenceMaxMultiplier: 0
+  lingerDecayInterval: 1
+  lingerDecayFraction: 0.5
+  boltSpeed: 14
+  boltArrivalDistance: 0.5
 --- !u!1 &143936274
 GameObject:
   m_ObjectHideFlags: 0
@@ -6205,6 +6267,7 @@ MonoBehaviour:
   - {fileID: 318305379}
   - {fileID: 253729398}
   - {fileID: 1998638233}
+  potionCards: []
   continueButton: {fileID: 1795216961}
   rerollButton: {fileID: 1773983997}
   rerollCostText: {fileID: 2084912502}
@@ -6770,6 +6833,8 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   metaProgressionSettings: {fileID: 11400000, guid: 0f710c1c82d03574daff25b98b549b92, type: 2}
   matchEffectPlayer: {fileID: 1350675960}
+  powerUpInventory: {fileID: 0}
+  potionIcons: {fileID: 0}
   upgradeDatabase: {fileID: 11400000, guid: 58858971a6871ee4e98f55e4fc05d723, type: 2}
   mainMenuScene: Main Menu
   pauseBeforeReturn: 1.5
@@ -6830,6 +6895,11 @@ MonoBehaviour:
   ArcResonanceBonus: 0
   SuperchargeEnabled: 0
   OverloadEnabled: 0
+  PoisonEnabled: 0
+  PoisonStacksBonus: 0
+  PoisonTickReduction: 0
+  PoisonVirulenceEnabled: 0
+  PoisonLingerEnabled: 0
   ColorSynergyCounts: 
   HammerRecoilDistance: 0
   GoldGainMultiplier: 0
@@ -9302,12 +9372,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03db8650235d3a9428af34cb98d8da84, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  matchProcessor: {fileID: 1842243460}
   ballChainManager: {fileID: 1842243456}
   bossPrefab: {fileID: 305311084075867703, guid: 9d8bd7e8d7deb8140a6f288c353dfc0b, type: 3}
   useDamageBolts: 1
   damageBoltPrefab: {fileID: 0}
-  fallbackDamageOrigin: {fileID: 0}
+  fallbackDamageOrigin: {x: 0, y: 0, z: 0}
   damageBoltSpeed: 14
   damageBoltArrivalDistance: 0.5
   initialBoltPoolSize: 16
@@ -9602,13 +9671,14 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   runtimeStats: {fileID: 1295330462}
   enemyManager: {fileID: 1775654145}
-  ballCount: 60
+  ballCount: 70
   colorCount: 2
-  introDuration: 5
-  introSurgeMultiplier: 20
+  introSurgeTargetProgress: 0.2
   waveBallCount: 80
-  waveSurgeMultiplier: 35
-  waveSurgeDuration: 2
+  waveSurgeTargetProgress: 0.3
+  surgeSpeedMultiplier: 10
+  surgeEaseFraction: 0.15
+  surgeTimeout: 12
 --- !u!114 &1842243456
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -9817,6 +9887,7 @@ Transform:
   - {fileID: 424151268}
   - {fileID: 2084717183}
   - {fileID: 1897750339}
+  - {fileID: 86736749}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1891858691
@@ -10262,6 +10333,7 @@ GameObject:
   - component: {fileID: 1971118542}
   - component: {fileID: 1971118541}
   - component: {fileID: 1971118544}
+  - component: {fileID: 1971118545}
   m_Layer: 0
   m_Name: PowerUpManager
   m_TagString: Untagged
@@ -10298,6 +10370,7 @@ MonoBehaviour:
   inventory: {fileID: 1971118541}
   settings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
   runtimeStats: {fileID: 1295330462}
+  awardOnCharge: 0
 --- !u!4 &1971118543
 Transform:
   m_ObjectHideFlags: 0
@@ -10328,6 +10401,22 @@ MonoBehaviour:
   ballChainManager: {fileID: 1842243456}
   matchProcessor: {fileID: 1842243460}
   ballSpawner: {fileID: 1842243455}
+  settings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
+  runtimeStats: {fileID: 1295330462}
+--- !u!114 &1971118545
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1971118540}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8b4c6d0e5a129b3c4d5e6f7a8b9c0d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  inventory: {fileID: 1971118541}
+  ballChainManager: {fileID: 1842243456}
   settings: {fileID: 11400000, guid: 40930715dd343cb40961476eb678c3c0, type: 2}
   runtimeStats: {fileID: 1295330462}
 --- !u!1 &1978800291

@@ -32,6 +32,9 @@ namespace YuumisProwl.Managers
         /// <summary>The live boss's authoring data (enemy spec, warden shield) — null between floors.</summary>
         public BossData CurrentBossData => currentBoss != null ? currentBoss.Data : null;
 
+        /// <summary>The live boss instance — null between floors. Used by synergies that apply effects to it (e.g. poison ticks).</summary>
+        public Boss CurrentBoss => currentBoss;
+
         // Reused buffer for the warden scan so it doesn't allocate per match.
         private readonly List<BallNode> chainBuffer = new List<BallNode>();
 
@@ -92,6 +95,7 @@ namespace YuumisProwl.Managers
             currentBoss = Instantiate(bossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation, bossSpawnPoint);
             currentBoss.SetHealthMultiplier(healthMult);
             currentBoss.OnDefeated += HandleBossDefeated;
+            ResetDamageVisual(); // clean resting visual each floor (shared materials may be dirty)
         }
 
         /// <summary>
@@ -112,11 +116,12 @@ namespace YuumisProwl.Managers
             for (int i = 0; i < balls.Count; i++)
             {
                 BallDestructionInfo b = balls[i];
-                // Base ball damage is shielded; the enemy clear-bonus rides the same bolt unshielded
-                // (it's the reward for clearing the enemy, not generic ball-clear damage).
-                float dmg = b.damageValue * shieldFactor;
+                // Ball damage + enemy clear-bonus, then the Warden shield applies to the whole hit
+                // (the bonus must not bypass the shield).
+                float dmg = b.damageValue;
                 if (b.enemyType != EnemyType.None && data != null)
                     dmg += data.GetClearBonus(b.enemyType);
+                dmg *= shieldFactor;
 
                 if (dmg <= 0f) continue;
                 if (useDamageBolts) SpawnBolt(b.position, dmg);
@@ -149,72 +154,62 @@ namespace YuumisProwl.Managers
 
         private System.Collections.IEnumerator BossDamageRoutine(float duration)
         {
+            // Cache the material refs up front. They're shared assets, so they stay valid even if the
+            // boss GameObject is destroyed mid-flash (e.g. a level ends) — the routine still finishes
+            // and resets the barrier to 0 instead of dying on a MissingReference and leaving it stuck.
+            Material bossMat = currentBoss != null ? currentBoss.bossMaterial : null;
+            Material wardenMat = currentBoss != null ? currentBoss.wardenBarrierMaterial : null;
+            if (bossMat == null) { damageFlashRoutine = null; yield break; }
+
             float half = Mathf.Max(0.01f, duration * 0.5f);
-
-            Color bossColor = currentBoss.bossMaterial.color;
+            Color bossColor = bossMat.color;
             float originalAlpha = bossColor.a;
-            Color wardenColor = currentBoss.wardenBarrierMaterial.color;
+            Color wardenColor = wardenMat != null ? wardenMat.color : Color.clear;
             float targetAlpha = 0.6f; // How transparent the boss becomes
-            float alpha;
+            bool shielded = AnyWardenAlive() && wardenMat != null;
             float t = 0f;
-            if (AnyWardenAlive())
+
+            while (t < half)
             {
-                while (t < half)
-                {
-                    t += Time.deltaTime;
-                    alpha = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
-                    bossColor.a = alpha;
-                    currentBoss.bossMaterial.color = bossColor;
-                    wardenColor.a = 1-alpha;
-                    currentBoss.wardenBarrierMaterial.color = wardenColor;
-                    
-
-                    yield return null;
-                }
-
-                t = 0f;
-                while (t < half)
-                {
-                    t += Time.deltaTime;
-                    alpha = Mathf.Lerp(targetAlpha, originalAlpha, t / half);
-                    bossColor.a = alpha;
-                    currentBoss.bossMaterial.color = bossColor;
-                    wardenColor.a = 1-alpha;
-                    currentBoss.wardenBarrierMaterial.color = wardenColor;
-
-                    yield return null;
-                }
+                t += Time.deltaTime;
+                float a = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
+                bossColor.a = a; bossMat.color = bossColor;
+                if (shielded) { wardenColor.a = 1f - a; wardenMat.color = wardenColor; }
+                yield return null;
             }
-            else
+            t = 0f;
+            while (t < half)
             {
-                while (t < half)
-                {
-                    t += Time.deltaTime;
-                    
-                    bossColor.a = Mathf.Lerp(originalAlpha, targetAlpha, t / half);
-                    currentBoss.bossMaterial.color = bossColor;
-
-                    yield return null;
-                }
-
-                t = 0f;
-                while (t < half)
-                {
-                    t += Time.deltaTime;
-
-                    bossColor.a = Mathf.Lerp(targetAlpha, originalAlpha, t / half);
-                    currentBoss.bossMaterial.color = bossColor;
-
-                    yield return null;
-                }
+                t += Time.deltaTime;
+                float a = Mathf.Lerp(targetAlpha, originalAlpha, t / half);
+                bossColor.a = a; bossMat.color = bossColor;
+                if (shielded) { wardenColor.a = 1f - a; wardenMat.color = wardenColor; }
+                yield return null;
             }
-            
 
-            bossColor.a = originalAlpha;
-            wardenColor.a = 0f;
-            currentBoss.bossMaterial.color = bossColor;
-            currentBoss.wardenBarrierMaterial.color = wardenColor;
+            // Always restore the resting state — boss opaque, barrier hidden.
+            bossColor.a = originalAlpha; bossMat.color = bossColor;
+            if (wardenMat != null) { wardenColor.a = 0f; wardenMat.color = wardenColor; }
             damageFlashRoutine = null;
+        }
+
+        /// <summary>
+        /// Forces the boss visuals back to their resting state (boss opaque, warden barrier hidden)
+        /// and stops any in-flight flash. Called on boss spawn + defeat so a flash interrupted by a
+        /// level/wave transition can never leave the shared materials stuck.
+        /// </summary>
+        private void ResetDamageVisual()
+        {
+            if (damageFlashRoutine != null) { StopCoroutine(damageFlashRoutine); damageFlashRoutine = null; }
+            if (currentBoss == null) return;
+            SetMaterialAlpha(currentBoss.bossMaterial, 1f);
+            SetMaterialAlpha(currentBoss.wardenBarrierMaterial, 0f);
+        }
+
+        private static void SetMaterialAlpha(Material m, float a)
+        {
+            if (m == null) return;
+            Color c = m.color; c.a = a; m.color = c;
         }
 
         private void BoltLost(BossDamageBolt bolt)
@@ -222,13 +217,17 @@ namespace YuumisProwl.Managers
             ReleaseBolt(bolt);
         }
 
-        /// <summary>True if any Warden is currently in the chain (scans the live ball list).</summary>
+        /// <summary>True if any Warden is currently *visible* on screen (below-hole queue wardens don't shield).</summary>
         private bool AnyWardenAlive()
         {
             if (ballChainManager == null) return false;
             ballChainManager.GetBallChainNonAlloc(chainBuffer);
             for (int i = 0; i < chainBuffer.Count; i++)
-                if (chainBuffer[i].enemyType == EnemyType.Warden) return true;
+            {
+                BallNode node = chainBuffer[i];
+                if (node.enemyType == EnemyType.Warden && node.ball != null && node.ball.gameObject.activeInHierarchy)
+                    return true;
+            }
             return false;
         }
 
@@ -278,6 +277,7 @@ namespace YuumisProwl.Managers
         private void HandleBossDefeated()
         {
             OnBossDefeated?.Invoke();
+            ResetDamageVisual(); // stop any flash + reset shared materials before the boss is gone
             currentBoss.OnDefeated -= HandleBossDefeated;
             Destroy(currentBoss.gameObject);
             currentBoss = null;

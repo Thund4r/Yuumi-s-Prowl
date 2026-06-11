@@ -97,6 +97,8 @@ namespace YuumisProwl.BallChain
         private readonly List<BallDestructionInfo> destroyedBuffer = new List<BallDestructionInfo>(16);
         private ObjectPool<Ball> ballPool;
         private bool isMoving = true;
+        private bool frozen;               // Freeze potion: chain stops advancing while true
+        private Coroutine freezeRoutine;
         private int nextSegmentId = 0;
 
         // Per-frame timing of Update, read by the on-screen PerfOverlay so we can measure the
@@ -226,6 +228,7 @@ namespace YuumisProwl.BallChain
         /// </summary>
         private void MoveChain(float deltaTime)
         {
+            if (frozen) return; // Freeze potion: the chain holds position (insertions/matches still process)
             if (pathController == null || segments.Count == 0) return;
 
             float pathLength = pathController.GetPathLength();
@@ -973,7 +976,56 @@ namespace YuumisProwl.BallChain
         {
             return (ballSpeed);
         }
+
+        /// <summary>
+        /// Path-progress (0–1) of the front-most ball in the chain, or NegativeInfinity if empty.
+        /// Used by the wave surge to stop boosting once the wave's lead reaches a target fraction.
+        /// </summary>
+        public float GetLeadProgress()
+        {
+            if (segments.Count == 0 || segments[0].IsEmpty) return float.NegativeInfinity;
+            return segments[0].balls[0].pathProgress;
+        }
+
+        /// <summary>
+        /// Shifts the whole chain up so its front ball sits at the hole entrance, skipping the dead
+        /// travel through the spawn-depth below the hole. Only ever pushes up (no-op if the lead is
+        /// already at/above the hole). Called by BallSpawner right before a wave surge.
+        /// </summary>
+        public void SnapChainToHole()
+        {
+            float lead = GetLeadProgress();
+            if (float.IsNegativeInfinity(lead) || lead >= holeProgress) return;
+
+            float delta = holeProgress - lead;
+            for (int s = 0; s < segments.Count; s++)
+            {
+                var segment = segments[s];
+                for (int i = 0; i < segment.Count; i++)
+                    segment.balls[i].pathProgress += delta;
+            }
+        }
         public void SetMoving(bool moving) { isMoving = moving; }
+
+        /// <summary>
+        /// Freeze potion: the chain stops advancing for `duration` seconds (forward motion and
+        /// gap-close), while insertions, matches, and visuals keep processing. Re-calling restarts
+        /// the timer. Reset by ClearChain on level transitions.
+        /// </summary>
+        public void FreezeChain(float duration)
+        {
+            if (duration <= 0f) return;
+            if (freezeRoutine != null) StopCoroutine(freezeRoutine);
+            freezeRoutine = StartCoroutine(FreezeRoutine(duration));
+        }
+
+        private System.Collections.IEnumerator FreezeRoutine(float duration)
+        {
+            frozen = true;
+            yield return new WaitForSeconds(duration);
+            frozen = false;
+            freezeRoutine = null;
+        }
 
         public void UpdateBallPositionsPublic() { UpdateBallPositions(); }
         public void UpdateBallVisibilityPublic() { UpdateBallVisibility(); }
@@ -1000,6 +1052,8 @@ namespace YuumisProwl.BallChain
             }
             segments.Clear();
             ChainSpeedMultiplier = 1f;
+            if (freezeRoutine != null) { StopCoroutine(freezeRoutine); freezeRoutine = null; }
+            frozen = false;
         }
 
         private void OnDestroy()
